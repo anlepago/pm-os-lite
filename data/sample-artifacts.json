@@ -1,0 +1,22 @@
+[
+  {
+    "type": "ticket",
+    "title": "DASH-101: Add date range picker component",
+    "content": "## Summary\nImplement a date range picker on the main dashboard toolbar.\n\n## Acceptance Criteria\n- [ ] Picker supports presets: Today, Last 7d, Last 30d, Last 90d, Custom\n- [ ] Custom range uses a calendar UI for start/end selection\n- [ ] Selecting a range triggers a data refresh without full-page reload\n- [ ] Maximum selectable range is capped at 365 days\n- [ ] Works on mobile (375px+)\n\n## Notes\nUse the `DateRangePicker` component from shadcn/ui. Hook into the dashboard store."
+  },
+  {
+    "type": "ticket",
+    "title": "DASH-102: Implement saved filter presets",
+    "content": "## Summary\nAllow users to save, name, and restore filter presets (date range + active filters).\n\n## Acceptance Criteria\n- [ ] Users can save a named preset from the active filter state\n- [ ] Up to 10 presets per user\n- [ ] Presets persist across sessions (stored in DB)\n- [ ] Users can rename and delete presets\n- [ ] Preset list accessible from a dropdown in the toolbar\n\n## Out of Scope\n- Sharing presets with other users (deferred)"
+  },
+  {
+    "type": "spec",
+    "title": "Dashboard responsive layout spec",
+    "content": "## Breakpoints\n| Breakpoint | Layout |\n|------------|--------|\n| ≥ 1280px | Multi-column grid (up to 4 cols) |\n| 768–1279px | 2-column grid |\n| < 768px | Single column, stacked |\n\n## Mobile Widget Condensed View\nOn viewports < 768px, each widget must display:\n- The primary KPI value (large, bold)\n- A sparkline mini-chart (last 7 days)\n- The metric label\n\nFull widget controls (filters, export) are hidden behind a `...` overflow menu.\n\n## Widget Picker\nA slide-out panel triggered by a toolbar icon allows users to:\n- Toggle widget visibility (checkbox per widget)\n- Reorder widgets via drag handle (desktop only)"
+  },
+  {
+    "type": "test_plan",
+    "title": "Dashboard revamp — QA test plan",
+    "content": "## Scope\nFunctional and regression testing for DASH-101, DASH-102, and responsive layout changes.\n\n## Test Cases\n\n### Date Range Picker\n1. Verify all preset options appear and apply correctly\n2. Verify custom range calendar allows selecting start < end\n3. Verify range > 365 days is rejected with an error message\n4. Verify data refreshes without full page reload on range change\n\n### Saved Presets\n1. Save a preset and verify it appears in the preset list\n2. Verify presets persist after logout/login\n3. Try to save an 11th preset — verify error message\n4. Rename a preset and verify the new name is reflected\n5. Delete a preset and verify it is removed\n\n### Responsive Layout\n1. Verify single-column layout at 375px viewport\n2. Verify condensed widget view on mobile (KPI + sparkline visible)\n3. Verify widget picker opens correctly on mobile\n4. Verify drag-and-drop is disabled on touch devices\n\n## Performance\n- Measure P95 page load time with Chrome DevTools throttled to 10 Mbps\n- Target: < 2 seconds\n\n## Accessibility\n- Run axe-core audit — zero critical violations\n- Verify keyboard navigation for date picker and preset dropdown"
+  }
+]

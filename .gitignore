@@ -137,3 +137,16 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+data/*.db
+
+# local env overrides (keep .example)
+.env.local
+!.env.local.example
+
+# Next.js
+next-env.d.ts
