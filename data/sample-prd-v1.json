@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "scenario": "Smart Notifications — PRD v1 (weak first draft)",
+    "expectedScore": 35,
+    "expectedRecommendation": "reject",
+    "expectedBlocked": true,
+    "notes": "Fails hard gates: no numeric success metrics, problem statement too vague, hypotheses unvalidated. Use this to demo the system catching a bad PRD before it wastes engineering time."
+  },
+  "artifact": {
+    "type": "prd",
+    "title": "Smart Notifications Feature",
+    "version": "v1.0 — DRAFT",
+    "author": "Jamie Chen",
+    "createdAt": "2025-01-08",
+    "product": "Nexus B2B SaaS Platform"
+  },
+  "content": {
+    "problemStatement": "Users are missing important updates in the product. This is causing frustration and we've heard complaints about it. We think if we make notifications smarter, users will be happier and more engaged with the product.",
+
+    "targetUsers": "All Nexus users",
+
+    "proposedSolution": "Build a smart notification system that sends the right notifications to the right users at the right time. The system should use some kind of intelligence to figure out what matters to each user.",
+
+    "successMetrics": [
+      "We'll improve user engagement with notifications",
+      "Users will be less frustrated",
+      "Notification open rates will go up",
+      "We'll see better retention numbers"
+    ],
+
+    "hypotheses": [
+      "If we personalize notifications, users will engage more",
+      "Reducing notification noise will make users happier",
+      "Smart delivery timing will improve open rates"
+    ],
+
+    "requirements": [
+      "Users should be able to configure their notification preferences",
+      "The system should send notifications via email and in-app",
+      "There should be a way to batch notifications so users aren't overwhelmed",
+      "The system should learn from user behavior over time"
+    ],
+
+    "outOfScope": [
+      "SMS notifications"
+    ],
+
+    "risks": [
+      "Users might turn off notifications entirely",
+      "Technical complexity of ML personalization"
+    ],
+
+    "timeline": "Q1 2025",
+
+    "openQuestions": [
+      "How smart does the 'smart' part need to be?",
+      "What data do we have to personalize with?",
+      "Do we build this or buy a third-party solution?"
+    ]
+  },
+  "expectedReview": {
+    "qualityScore": 35,
+    "recommendation": "reject",
+    "blocked": true,
+    "hardGates": [
+      {
+        "gate": "numeric_success_metrics",
+        "passed": false,
+        "reason": "All 4 success metrics are qualitative ('improve', 'go up', 'better'). No baselines, targets, or measurement methods defined."
+      },
+      {
+        "gate": "problem_quantified",
+        "passed": false,
+        "reason": "Problem statement contains no data: no user count affected, no frequency of complaints, no current state baseline."
+      },
+      {
+        "gate": "hypothesis_validation_plan",
+        "passed": false,
+        "reason": "3 hypotheses listed but zero validation methods specified. How will these be tested before full build?"
+      }
+    ],
+    "softGates": [
+      {
+        "gate": "target_user_specificity",
+        "passed": false,
+        "suggestion": "'All Nexus users' is too broad. Segment by role, plan tier, or use-case to prioritize scope."
+      },
+      {
+        "gate": "out_of_scope_coverage",
+        "passed": false,
+        "suggestion": "Only 1 out-of-scope item. Likely missing: push notifications, Slack integration, notification analytics dashboard, admin bulk controls."
+      },
+      {
+        "gate": "timeline_milestones",
+        "passed": false,
+        "suggestion": "'Q1 2025' is a quarter, not a plan. No milestones, phases, or dependency mapping."
+      }
+    ],
+    "adversarial": {
+      "riskLevel": "high",
+      "concerns": [
+        "The word 'smart' appears 4 times but 'ML' or 'algorithm' is never defined. Engineering cannot scope this.",
+        "No definition of 'important update' — this is the core product decision and it's unresolved.",
+        "Success metrics are all directional. There is no way to determine if this feature succeeded or failed after shipping.",
+        "Open questions about build-vs-buy should be resolved before writing a PRD, not left for later."
+      ]
+    },
+    "drift": {
+      "aligned": false,
+      "driftScore": 72,
+      "analysis": "Q1 OKRs target user activation (trial-to-paid conversion) and 30-day retention. This PRD mentions 'retention numbers' once but does not connect notification behavior to activation or churn. The feature could be entirely off-strategy.",
+      "driftedObjectives": ["Increase user activation rate", "Improve 30-day retention"]
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "_meta": {
+    "scenario": "Smart Notifications — PRD v2 (revised after first review)",
+    "expectedScore": 62,
+    "expectedRecommendation": "revise",
+    "expectedBlocked": false,
+    "notes": "Passes hard gates — problem is quantified, metrics exist. But measurement methods are vague, hypotheses still lack validation plans, and the OKR connection is asserted rather than demonstrated. Good demo of 'almost there but not ready.'"
+  },
+  "artifact": {
+    "type": "prd",
+    "title": "Smart Notifications Feature",
+    "version": "v2.0 — In Review",
+    "author": "Jamie Chen",
+    "createdAt": "2025-01-15",
+    "product": "Nexus B2B SaaS Platform",
+    "changeLog": "v2.0: Added user research data, quantified metrics, expanded out-of-scope section per reviewer feedback."
+  },
+  "content": {
+    "problemStatement": "In Q4 2024, our user research team interviewed 24 customers and ran a survey with 312 respondents. 68% reported feeling overwhelmed by Nexus notifications, and 41% said they had disabled email notifications entirely. Churned users cited 'too much noise' as a top-3 frustration in 6 of our last 11 exit interviews. Meanwhile, users who engage with in-app notifications have a 30-day retention rate 18 percentage points higher than those who don't — but only 23% of active users engage with notifications weekly.",
+
+    "targetUsers": "Primary: Power users (≥3 logins/week) on Team and Enterprise plans who manage cross-functional workflows. Secondary: Occasional users (1–2 logins/week) who rely on email digests to stay informed.",
+
+    "proposedSolution": "Build a preference-driven notification system with three layers: (1) user-controlled channel preferences per notification category, (2) frequency caps to prevent notification fatigue, and (3) a digest mode that batches low-priority notifications into a daily or weekly summary. An ML-based relevance score will determine digest inclusion order in a future phase.",
+
+    "successMetrics": [
+      {
+        "metric": "Notification engagement rate",
+        "current": "23% of active users engage weekly",
+        "target": "40% of active users engage weekly",
+        "measurementMethod": "We'll track this in our analytics"
+      },
+      {
+        "metric": "Email opt-out rate",
+        "current": "41% have disabled email notifications",
+        "target": "Reduce to under 25%",
+        "measurementMethod": "User settings data"
+      },
+      {
+        "metric": "30-day retention for notification engagers",
+        "current": "+18pp vs non-engagers",
+        "target": "Maintain or improve this gap post-launch",
+        "measurementMethod": "Cohort analysis"
+      },
+      {
+        "metric": "Notification preference completion rate",
+        "current": "N/A (new feature)",
+        "target": "60% of users set preferences within 7 days of onboarding",
+        "measurementMethod": "Funnel analytics"
+      }
+    ],
+
+    "hypotheses": [
+      {
+        "hypothesis": "Users who set explicit notification preferences will have higher weekly engagement than those who don't.",
+        "validationMethod": "Compare engagement rates between users who complete preference setup vs those who don't, 60 days post-launch."
+      },
+      {
+        "hypothesis": "Frequency caps will reduce email opt-outs without reducing total click-throughs.",
+        "validationMethod": "Monitor opt-out rate and total notification clicks week-over-week after cap rollout."
+      },
+      {
+        "hypothesis": "Digest mode will re-engage the 41% who disabled emails.",
+        "validationMethod": "We'll see if opt-out numbers improve."
+      }
+    ],
+
+    "requirements": [
+      "Users can set per-category preferences (in-app, email, none) for each notification type",
+      "Frequency cap: no more than N notifications per channel per time window (configurable by admins)",
+      "Digest mode: daily and weekly digest options per category",
+      "Digest email template with 'snooze' and 'manage preferences' CTAs",
+      "Preference center accessible from user settings and notification bell",
+      "Admin view: org-level notification volume report",
+      "API endpoint for third-party integrations to trigger notifications"
+    ],
+
+    "outOfScope": [
+      "SMS and push notifications (mobile app — separate initiative)",
+      "Slack and Teams integrations (deferred to Q2)",
+      "AI-based personalization (Phase 2)",
+      "Notification analytics dashboard for end users",
+      "Bulk notification muting by admins"
+    ],
+
+    "risks": [
+      {
+        "risk": "Users change preferences once and never revisit them",
+        "mitigation": "Periodic 'is this still working for you?' prompts"
+      },
+      {
+        "risk": "Digest mode reduces time-sensitive response rates",
+        "mitigation": "High-priority notifications bypass digest regardless of user setting"
+      },
+      {
+        "risk": "Engineering complexity of retroactive preference migration",
+        "mitigation": "Default all existing users to current behavior; opt-in to new system"
+      }
+    ],
+
+    "timeline": {
+      "q1Phase1": "Preference center + frequency caps (weeks 1–6)",
+      "q1Phase2": "Digest mode (weeks 7–11)",
+      "q1Launch": "Full rollout week 12"
+    },
+
+    "openQuestions": [
+      "What is the right default frequency cap for free-plan users?",
+      "Should enterprise admins be able to override user preferences for compliance notifications?"
+    ]
+  },
+  "expectedReview": {
+    "qualityScore": 62,
+    "recommendation": "revise",
+    "blocked": false,
+    "hardGates": [
+      {
+        "gate": "numeric_success_metrics",
+        "passed": true
+      },
+      {
+        "gate": "problem_quantified",
+        "passed": true
+      },
+      {
+        "gate": "hypothesis_validation_plan",
+        "passed": true,
+        "note": "Barely passes — hypothesis 3 validation ('we'll see if opt-out numbers improve') is too vague to count as a plan."
+      }
+    ],
+    "softGates": [
+      {
+        "gate": "measurement_method_specificity",
+        "passed": false,
+        "suggestion": "Metric 1 says 'we'll track this in our analytics' — which tool, which event, which dashboard? Metric 3 says 'cohort analysis' — define cohort boundaries and observation window."
+      },
+      {
+        "gate": "hypothesis_3_validation",
+        "passed": false,
+        "suggestion": "Hypothesis 3 validation is 'we'll see if opt-out numbers improve' — this is not a validation plan. Specify a threshold, timeline, and decision rule (e.g., 'if opt-out rate drops by <5pp in 30 days, we pivot digest UX')."
+      },
+      {
+        "gate": "okr_connection_explicit",
+        "passed": false,
+        "suggestion": "The PRD references retention data but never explicitly maps to Q1 OKRs. Add a section stating: 'This feature contributes to KR2 (raise 30-day retention from 42% to 55%) by improving notification engagement, which correlates with +18pp retention.'"
+      },
+      {
+        "gate": "admin_requirements_detail",
+        "passed": false,
+        "suggestion": "Admin view is one line: 'org-level notification volume report.' What columns? What time ranges? What actions can admins take from this view?"
+      }
+    ],
+    "adversarial": {
+      "riskLevel": "medium",
+      "concerns": [
+        "The 18pp retention correlation is cited as causal evidence but it's observational. Users who engage with notifications may simply be more engaged users. The feature might not move retention at all.",
+        "Hypothesis 3 targets 're-engaging' users who disabled email — but those users made an active choice. Have you considered that they might disable digest emails too?",
+        "Phase 2 ML personalization is deferred but the API endpoint requirement implies third-party integrations now. These could create compatibility debt when Phase 2 ships."
+      ]
+    },
+    "drift": {
+      "aligned": true,
+      "driftScore": 31,
+      "analysis": "The retention correlation data creates a plausible connection to Q1 OKR KR1 (30-day retention). However, the activation OKR (trial-to-paid conversion) is not addressed. Notifications during free-trial onboarding could be a direct lever — this angle is unexplored.",
+      "driftedObjectives": ["Increase user activation rate (trial-to-paid)"]
+    }
+  }
+}

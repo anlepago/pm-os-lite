@@ -1,0 +1,224 @@
+{
+  "_meta": {
+    "scenario": "Smart Notifications — PRD v3 (strong, demo-ready version)",
+    "expectedScore": 85,
+    "expectedRecommendation": "approve",
+    "expectedBlocked": false,
+    "notes": "All hard gates pass. Metrics have baselines, targets, measurement sources, and owners. Hypotheses have explicit decision rules. OKR alignment is explicitly mapped. Adversarial agent finds minor concerns only. Use this as the 'what good looks like' moment in the demo."
+  },
+  "artifact": {
+    "type": "prd",
+    "title": "Smart Notifications Feature",
+    "version": "v3.0 — Approved for Development",
+    "author": "Jamie Chen",
+    "reviewer": "Alex Rivera (PM Lead)",
+    "createdAt": "2025-01-22",
+    "product": "Nexus B2B SaaS Platform",
+    "changeLog": "v3.0: Added explicit OKR mapping, tightened measurement methods with tool/event references, added decision rules to all hypotheses, clarified admin requirements."
+  },
+  "content": {
+    "executiveSummary": "68% of Nexus users feel overwhelmed by notifications (n=312 survey, Q4 2024). 41% have disabled email notifications entirely, cutting off our primary async engagement channel. Users who engage with notifications show 18pp higher 30-day retention — yet only 23% engage weekly. This feature gives users control over notification frequency and format, targeting a 17pp increase in weekly engagement and a 16pp reduction in email opt-outs, directly contributing to Q1 KR1 (30-day retention: 42% → 55%).",
+
+    "problemStatement": {
+      "context": "Nexus sends ~14 notification types across 4 channels (in-app, email, browser push, mobile). Currently, all users receive all notification types at system-default frequency with no per-user control beyond a binary email on/off toggle.",
+      "quantifiedPain": [
+        "41% of active users have disabled all email notifications (User Settings DB, Jan 2025 snapshot, n=8,240 active users)",
+        "68% of surveyed users cite 'notification overload' as a top-5 frustration (Q4 2024 survey, n=312, ±5.5% margin)",
+        "6 of 11 churned enterprise accounts cited 'too much noise' in exit interviews (Q3–Q4 2024)",
+        "Only 23% of active users engage with any notification weekly (Mixpanel, 90-day trailing avg)"
+      ],
+      "opportunity": "Users who engage with ≥1 notification per week show 30-day retention of 71% vs 53% for non-engagers — an 18pp gap (Mixpanel cohort analysis, Q4 2024, n=3,100+ users, 60-day observation window). Closing even half of this gap via better notification UX could move aggregate 30-day retention by ~3–4pp."
+    },
+
+    "targetUsers": {
+      "primary": {
+        "segment": "Power users on Team/Enterprise plans (≥3 logins/week, ≥5 team members)",
+        "size": "~2,800 users (34% of active base)",
+        "painPoint": "Manage multiple workstreams; need granular control to avoid alert fatigue while staying on top of critical updates."
+      },
+      "secondary": {
+        "segment": "Occasional users (1–2 logins/week) on any plan",
+        "size": "~4,100 users (50% of active base)",
+        "painPoint": "Miss important updates between sessions; need a high-signal digest rather than real-time pings."
+      },
+      "outOfScope": "Free-plan solo users (<1 login/week) — low retention leverage, different churn drivers."
+    },
+
+    "proposedSolution": {
+      "overview": "A three-layer notification control system: (1) per-category channel preferences, (2) frequency caps with smart cooldowns, and (3) digest mode for low-priority batching. Phase 1 ships layers 1 and 2. Phase 2 adds digest mode and the admin analytics view.",
+      "keyDecisions": [
+        "No ML personalization in scope — ship rule-based controls first, validate engagement lift, then evaluate ML ROI",
+        "High-priority system notifications (billing failures, security alerts) bypass all user preferences",
+        "Default state for existing users: current behavior preserved; opt-in to new system via onboarding prompt"
+      ]
+    },
+
+    "successMetrics": [
+      {
+        "metric": "Weekly notification engagement rate",
+        "baseline": "23% of active users engage with ≥1 notification/week",
+        "target": "40% of active users engage with ≥1 notification/week",
+        "liftRequired": "+17pp",
+        "measurementSource": "Mixpanel: event `notification_clicked` OR `notification_action_taken`, unique users / MAU, 7-day rolling window",
+        "measurementOwner": "Data team — auto-dashboard in Looker (chart: notif-engagement-weekly)",
+        "evaluationWindow": "90 days post-full-rollout",
+        "guardrail": "If total notification volume drops >30% week-over-week, pause rollout and investigate suppression bug"
+      },
+      {
+        "metric": "Email notification opt-out rate",
+        "baseline": "41% of active users have email notifications disabled",
+        "target": "25% or fewer have email notifications disabled",
+        "liftRequired": "-16pp",
+        "measurementSource": "User Settings DB query: `SELECT COUNT(*) WHERE email_notif_enabled = false / total_active_users`; run weekly via scheduled job `settings-audit-cron`",
+        "measurementOwner": "Engineering — automated report to #pm-metrics Slack channel",
+        "evaluationWindow": "60 days post-full-rollout",
+        "guardrail": "Opt-out rate must not increase above 45% at any point during rollout"
+      },
+      {
+        "metric": "Preference center completion rate (new users)",
+        "baseline": "N/A — new feature",
+        "target": "60% of new users complete preference setup within 7 days of account creation",
+        "measurementSource": "Mixpanel funnel: `signup_completed` → `notification_preferences_saved`, 7-day window",
+        "measurementOwner": "PM — reviewed in weekly activation sync",
+        "evaluationWindow": "First 30 days of Phase 1 rollout"
+      },
+      {
+        "metric": "30-day retention — notification engagers vs non-engagers gap",
+        "baseline": "+18pp gap (engagers: 71%, non-engagers: 53%)",
+        "target": "Gap maintained or widened; aggregate 30-day retention moves from 42% toward 55% (Q1 OKR KR1)",
+        "measurementSource": "Mixpanel retention cohort report, 30-day observation, segmented by `notification_engaged_7d = true/false`",
+        "measurementOwner": "Data team — monthly cohort report",
+        "evaluationWindow": "90-day cohort after full-rollout (result available ~Q3 2025)"
+      }
+    ],
+
+    "hypotheses": [
+      {
+        "hypothesis": "Users who complete preference setup will have ≥15pp higher weekly notification engagement than users who skip setup.",
+        "rationale": "Explicit preferences reduce irrelevant notifications, increasing signal-to-noise and making engagement more likely.",
+        "validationMethod": "60 days post-Phase 1 launch: compare Mixpanel weekly engagement rate between cohort A (preference_saved event fired within 7 days) and cohort B (no preference event in 7 days). Minimum cohort size: 500 users each.",
+        "decisionRule": "If lift is <10pp, preference setup UX needs redesign (likely friction in the flow). If lift is >15pp, prioritize in-product prompts to drive setup completion."
+      },
+      {
+        "hypothesis": "Frequency caps will reduce email opt-outs by at least 8pp without reducing total notification click-throughs.",
+        "rationale": "Current opt-outs are driven by volume, not content — frequency caps address root cause while preserving notification value.",
+        "validationMethod": "A/B test: 50% of new Team/Enterprise users get frequency caps enabled at signup (group A), 50% get current default (group B). Measure opt-out rate and total clicks after 30 days.",
+        "decisionRule": "If opt-out delta is <5pp OR clicks drop >10% in group A, frequency caps are not solving the right problem — revert and investigate digest-only approach."
+      },
+      {
+        "hypothesis": "Digest mode will re-engage at least 20% of users who previously disabled email notifications.",
+        "rationale": "These users opted out of email due to volume, not email as a channel. A low-frequency digest is a different value proposition.",
+        "validationMethod": "Phase 2 launch: send one-time re-engagement email to all users with email_notif_enabled=false offering digest opt-in. Track: (a) open rate, (b) digest opt-in rate, (c) 30-day email opt-out rate for those who opt in.",
+        "decisionRule": "If digest opt-in rate from the re-engagement campaign is <10%, digest mode is not compelling to this segment — do not invest in further digest personalization. If ≥20% opt in and maintain for 30 days, expand to onboarding flow."
+      }
+    ],
+
+    "requirements": {
+      "phase1": [
+        "P0 — Preference center: per-category controls (in-app / email / none) for all 14 notification types",
+        "P0 — Frequency cap engine: configurable max-per-channel-per-window, defaults: 5 in-app/day, 2 email/day, 10 in-app/week",
+        "P0 — High-priority bypass: billing, security, and compliance notifications ignore all user preferences",
+        "P1 — Preference center accessible from: user settings page, notification bell dropdown, unsubscribe link in email footer",
+        "P1 — Admin override: org admins can lock specific notification categories to 'always on' for compliance",
+        "P1 — Preference migration: existing users default to current behavior; shown onboarding prompt on next login",
+        "P2 — Admin volume report: table of notification volume by type and channel for the org, last 30/90 days"
+      ],
+      "phase2": [
+        "P0 — Digest mode: daily and weekly digest options per category, respecting frequency cap fallback logic",
+        "P0 — Digest email template: top-N items by recency, 'snooze 1 week' CTA, 'manage preferences' deep link",
+        "P1 — Re-engagement campaign: one-time email to all users with email disabled offering digest opt-in"
+      ]
+    },
+
+    "outOfScope": [
+      "SMS notifications (mobile team initiative, Q2 roadmap)",
+      "Slack and Microsoft Teams integrations (deferred to Q2 — requires separate OAuth and delivery infrastructure)",
+      "AI/ML-based notification ranking (Phase 3, dependent on Phase 1+2 engagement data)",
+      "Notification analytics dashboard for end users (deferred — admin view ships Phase 1, user-facing analytics is lower priority)",
+      "Bulk notification muting by admins for entire org (deferred — edge case, <3 support requests in Q4)",
+      "Browser push notifications on mobile web (browser API fragmentation, low ROI vs. Phase 1 impact)"
+    ],
+
+    "okrAlignment": {
+      "q1KR1": {
+        "keyResult": "Raise 30-day retention from 42% to 55%",
+        "connection": "Notification engagers show 71% 30-day retention vs 53% for non-engagers. This feature targets +17pp engagement rate, which if engagement retention correlation holds, contributes ~3–4pp to aggregate 30-day retention.",
+        "assumption": "The engagement-retention correlation is partially causal (not purely selection effect). Validated by the hypothesis 1 A/B test structure."
+      },
+      "q1KR2": {
+        "keyResult": "Increase user activation rate (trial-to-paid conversion) from 18% to 28%",
+        "connection": "Phase 1 preference center will be integrated into the new-user onboarding flow (Week 3 of free trial). Personalized notifications during trial are a re-engagement lever for users who go quiet in days 7–14. Expected contribution: indirect, via trial engagement uplift.",
+        "assumption": "Onboarding team confirms notification preference step can be added to existing onboarding wizard without increasing drop-off. Dependency: OB-204 (onboarding wizard refactor, ships Week 4)."
+      }
+    },
+
+    "risks": [
+      {
+        "risk": "Users set preferences once and forget them, leading to stale configurations as product evolves",
+        "likelihood": "Medium",
+        "mitigation": "Quarterly 'your notification preferences' digest email; alert PM when new notification types are added without preference center update"
+      },
+      {
+        "risk": "High-priority bypass list scope creep — teams lobby to add their notifications to 'always on'",
+        "likelihood": "High",
+        "mitigation": "Bypass list is hardcoded in config, not self-serve. Changes require PM approval and quarterly review."
+      },
+      {
+        "risk": "Frequency cap defaults too aggressive, suppressing legitimate time-sensitive notifications",
+        "likelihood": "Low",
+        "mitigation": "Defaults set conservatively (5 in-app/day) and monitored via guardrail metric. A/B test validates before full rollout."
+      }
+    ],
+
+    "dependencies": [
+      "OB-204: Onboarding wizard refactor (ships Week 4) — required for activation OKR connection",
+      "INFRA-88: Email delivery rate SLA upgrade to 99.5% (ships Week 2) — required before increasing digest email volume",
+      "Data team: Mixpanel funnel setup for preference completion tracking (2 days, before Phase 1 launch)"
+    ],
+
+    "timeline": {
+      "week1_2": "Discovery complete, preference center design finalized, A/B test plan approved",
+      "week3_6": "Phase 1 build: preference center + frequency cap engine",
+      "week7": "Phase 1 internal QA + A/B test segment setup",
+      "week8": "Phase 1 rollout: 10% → 50% → 100% over 3 days",
+      "week9_11": "Phase 2 build: digest mode + re-engagement campaign",
+      "week12": "Phase 2 launch + re-engagement email send"
+    }
+  },
+  "expectedReview": {
+    "qualityScore": 85,
+    "recommendation": "approve",
+    "blocked": false,
+    "hardGates": [
+      { "gate": "numeric_success_metrics", "passed": true },
+      { "gate": "problem_quantified", "passed": true },
+      { "gate": "hypothesis_validation_plan", "passed": true },
+      { "gate": "okr_alignment_explicit", "passed": true }
+    ],
+    "softGates": [
+      {
+        "gate": "retention_causality_assumption",
+        "passed": true,
+        "note": "PRD correctly flags the correlation-vs-causation risk and addresses it via A/B test design. No deduction."
+      },
+      {
+        "gate": "dependency_risk_coverage",
+        "passed": false,
+        "suggestion": "OB-204 is marked as required for the activation OKR connection, but there is no contingency if OB-204 slips. Add: 'If OB-204 is delayed past Week 5, notification preference step will ship standalone in settings only, and activation OKR contribution is reduced.'"
+      }
+    ],
+    "adversarial": {
+      "riskLevel": "low",
+      "concerns": [
+        "The 3–4pp aggregate retention estimate is back-of-envelope. The math (engagement rate × retention delta × portion of users) would benefit from explicit calculation in the appendix to stress-test the assumption.",
+        "The bypass list governance mitigation ('PM approval and quarterly review') is process-dependent. Consider a technical enforcement mechanism — e.g., a CI check that fails if bypass list length exceeds N without a signed-off ticket."
+      ]
+    },
+    "drift": {
+      "aligned": true,
+      "driftScore": 12,
+      "analysis": "Both Q1 OKRs (retention and activation) are explicitly mapped with connection logic and stated assumptions. Drift score reflects minor gap: the activation connection is indirect and dependency-gated. If OB-204 slips, the activation contribution disappears entirely.",
+      "driftedObjectives": []
+    }
+  }
+}

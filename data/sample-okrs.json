@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "scenario": "Q1 2025 Company OKRs — used as the active baseline for drift detection",
+    "notes": "These OKRs are deliberately focused on activation and retention (making existing users more successful). Use these to show how the drift agent catches work that drifts toward acquisition — a different strategy entirely."
+  },
+  "artifact": {
+    "type": "okr",
+    "title": "Q1 2025 OKRs — Nexus Product & Growth",
+    "timeframe": "Q1 2025 (Jan 1 – Mar 31)",
+    "owner": "Alex Rivera, VP Product",
+    "setAt": "2024-12-18",
+    "status": "active"
+  },
+  "content": {
+    "context": "Following a Q4 2024 board review, Nexus is shifting focus from top-of-funnel growth to monetization efficiency. CAC is up 40% YoY while LTV has been flat. Q1 2025 is a deliberate 'consolidation quarter': ship nothing new for new users — instead, make existing users successful enough to expand and renew.",
+
+    "objectives": [
+      {
+        "id": "O1",
+        "title": "Dramatically improve new user activation",
+        "description": "Too many trial users sign up and never reach their first 'aha moment.' We lose 72% of trials before they invite a second team member. Fix the funnel, not the top.",
+        "keyResults": [
+          {
+            "id": "O1-KR1",
+            "description": "Increase trial-to-paid conversion rate from 18% to 28%",
+            "baseline": "18%",
+            "target": "28%",
+            "unit": "percent",
+            "measurementSource": "Stripe + CRM: paid conversion event within 14 days of trial start",
+            "owner": "Growth PM",
+            "reviewCadence": "weekly"
+          },
+          {
+            "id": "O1-KR2",
+            "description": "Reduce median time-to-first-value from 4.2 days to 2 days (first meaningful action: invite teammate OR publish first report)",
+            "baseline": "4.2 days",
+            "target": "2.0 days",
+            "unit": "days",
+            "measurementSource": "Mixpanel: median time from `signup_completed` to `first_value_action` event",
+            "owner": "Onboarding PM",
+            "reviewCadence": "weekly"
+          },
+          {
+            "id": "O1-KR3",
+            "description": "Achieve 60% completion rate on the onboarding checklist (currently 31%)",
+            "baseline": "31%",
+            "target": "60%",
+            "unit": "percent",
+            "measurementSource": "Mixpanel: `onboarding_checklist_completed` event / `signup_completed` event, 7-day window",
+            "owner": "Onboarding PM",
+            "reviewCadence": "weekly"
+          }
+        ]
+      },
+      {
+        "id": "O2",
+        "title": "Improve 30-day and 90-day retention for paid accounts",
+        "description": "Our 30-day retention is 42% — well below the SaaS B2B benchmark of 60%+. Users who reach week 4 have an 84% chance of renewing. The problem is getting them to week 4.",
+        "keyResults": [
+          {
+            "id": "O2-KR1",
+            "description": "Raise 30-day retention for paid users from 42% to 55%",
+            "baseline": "42%",
+            "target": "55%",
+            "unit": "percent",
+            "measurementSource": "Mixpanel: 30-day retention cohort report, paid users only, monthly cohorts",
+            "owner": "Product PM",
+            "reviewCadence": "monthly (30-day lag)"
+          },
+          {
+            "id": "O2-KR2",
+            "description": "Reduce monthly churn rate from 6.8% to 4.5%",
+            "baseline": "6.8%",
+            "target": "4.5%",
+            "unit": "percent",
+            "measurementSource": "Stripe: churned MRR / beginning-of-month MRR",
+            "owner": "CS + PM joint ownership",
+            "reviewCadence": "monthly"
+          },
+          {
+            "id": "O2-KR3",
+            "description": "Increase the proportion of paid users who are 'highly engaged' (≥3 logins/week + ≥1 collaboration action) from 28% to 45%",
+            "baseline": "28%",
+            "target": "45%",
+            "unit": "percent",
+            "measurementSource": "Mixpanel: custom segment `highly_engaged_user`, weekly snapshot",
+            "owner": "Product PM",
+            "reviewCadence": "weekly"
+          }
+        ]
+      },
+      {
+        "id": "O3",
+        "title": "Make the platform reliable enough that reliability is never a churn reason",
+        "description": "In Q4 2024, 3 enterprise accounts cited reliability concerns in exit interviews. Zero tolerance for reliability-driven churn in Q1.",
+        "keyResults": [
+          {
+            "id": "O3-KR1",
+            "description": "Achieve 99.9% uptime (max 43 minutes downtime in Q1)",
+            "baseline": "99.6% (Q4 2024)",
+            "target": "99.9%",
+            "unit": "percent",
+            "measurementSource": "PagerDuty + statuspage.io: cumulative downtime log",
+            "owner": "Engineering Lead",
+            "reviewCadence": "weekly"
+          },
+          {
+            "id": "O3-KR2",
+            "description": "Reduce P95 API latency from 340ms to under 200ms",
+            "baseline": "340ms",
+            "target": "200ms",
+            "unit": "milliseconds",
+            "measurementSource": "Datadog APM: p95 latency, 7-day trailing, all production endpoints",
+            "owner": "Engineering Lead",
+            "reviewCadence": "weekly"
+          }
+        ]
+      }
+    ],
+
+    "explicitlyNotInStrategy": [
+      "New acquisition channels or paid marketing campaigns — CAC efficiency is a Q2 initiative",
+      "New enterprise sales motions — Sales team is in hiring freeze through Q1",
+      "New integrations for prospect-facing demos — no new integration work unless it directly improves retention",
+      "Public-facing product launches or press announcements — no launch distractions in Q1"
+    ]
+  }
+}

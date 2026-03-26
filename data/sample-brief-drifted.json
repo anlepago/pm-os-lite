@@ -1,0 +1,119 @@
+{
+  "_meta": {
+    "scenario": "Drifted Feature Brief — acquisition-focused work disguised as a retention initiative",
+    "expectedDriftScore": 78,
+    "expectedRecommendation": "revise",
+    "notes": "This brief is focused on SEO landing pages, referral programs, and free-tier expansion — all acquisition plays. The Q1 OKRs explicitly say 'no new acquisition channels.' The author gestures at retention language ('users who come through referral have better retention') but the deliverables are pure acquisition. Great demo of the drift agent catching strategic misalignment that a human reviewer might miss on a quick read."
+  },
+  "artifact": {
+    "type": "brief",
+    "title": "Growth Loop: Referral Program + SEO Content Hub",
+    "author": "Morgan Lee",
+    "team": "Growth",
+    "createdAt": "2025-01-20",
+    "product": "Nexus B2B SaaS Platform",
+    "estimatedEffort": "6 weeks, 2 engineers + 1 designer + content writer"
+  },
+  "content": {
+    "oneLiner": "Launch a referral program and SEO content hub to generate a self-sustaining pipeline of high-intent leads.",
+
+    "background": "Our paid acquisition CAC hit $480 in Q4 2024 (+40% YoY). Meanwhile, the 14 customers we acquired via word-of-mouth in Q4 had a 30-day retention rate of 74% vs our average of 42%. Referred users are better users. This brief proposes building the infrastructure to systematize referrals and pair it with an SEO content hub that captures top-of-funnel search traffic from our ICP (B2B ops managers searching for workflow automation). Both investments create compounding, low-CAC acquisition that pays dividends in retention improvement.",
+
+    "proposedWork": {
+      "pillar1_referral": {
+        "title": "In-Product Referral Program",
+        "description": "Build a referral flow where existing users can invite peers and earn account credits. Referred users get a 30-day extended trial.",
+        "deliverables": [
+          "Referral link generation per user",
+          "Referral tracking dashboard (admin view)",
+          "Credit system: $20 account credit per successful referral conversion",
+          "Extended trial landing page (30 days vs standard 14)",
+          "Automated referral email sequence (3 emails over 14 days)",
+          "Referral leaderboard for power users (gamification)"
+        ],
+        "successMetrics": [
+          "20% of new signups in March arrive via referral link",
+          "Referred users convert at 2x the rate of organic signups",
+          "Net referral cost: <$80 per acquired user (credit cost vs LTV)"
+        ]
+      },
+      "pillar2_seo": {
+        "title": "SEO Content Hub",
+        "description": "Build a /resources section with 12 long-form articles targeting high-intent keywords our ICP is searching for. Each article has a lead capture form offering a template or checklist download.",
+        "deliverables": [
+          "12 articles (2,500+ words each) targeting keywords: 'workflow automation for ops teams,' 'project status reporting template,' 'team productivity metrics,' etc.",
+          "Lead capture forms with Nexus trial CTA",
+          "Resource hub index page with filtering by topic",
+          "Email nurture sequence triggered by resource download (5 emails over 21 days)",
+          "Monthly SEO performance dashboard in Looker"
+        ],
+        "successMetrics": [
+          "2,000 organic visitors/month to /resources by end of Q1",
+          "150 trial signups from content hub in Q1",
+          "Top-3 Google ranking for 3 target keywords by Q2"
+        ]
+      }
+    },
+
+    "retentionAngle": "Users acquired via referral and content show meaningfully better retention — 74% vs 42% 30-day retention in our Q4 sample. By shifting our acquisition mix toward these higher-quality channels, we passively improve aggregate retention metrics without requiring product changes. This brief is therefore a retention strategy as much as an acquisition play.",
+
+    "whyNow": [
+      "CAC is unsustainable — Q1 is the right time to plant lower-CAC seeds",
+      "The content hub takes 6+ weeks to generate SEO results — starting now means results in Q2",
+      "2 engineers are finishing INFRA-71 in Week 2 and have capacity before the next major feature cycle"
+    ],
+
+    "risks": [
+      "SEO content takes time — organic rankings typically take 3–6 months, so Q1 results will be early-stage",
+      "Referral credit system requires billing integration work — estimated 1 week of backend eng",
+      "Content quality risk — need strong writer with B2B SaaS domain expertise"
+    ],
+
+    "outOfScope": [
+      "Paid advertising campaigns",
+      "Influencer or partnership programs",
+      "Changes to core product onboarding flow"
+    ]
+  },
+  "expectedReview": {
+    "qualityScore": 58,
+    "recommendation": "revise",
+    "blocked": false,
+    "hardGates": [
+      { "gate": "numeric_success_metrics", "passed": true },
+      { "gate": "problem_quantified", "passed": true }
+    ],
+    "softGates": [
+      {
+        "gate": "okr_alignment",
+        "passed": false,
+        "suggestion": "The brief's primary deliverables (referral links, SEO articles, lead capture, email nurture) are acquisition infrastructure. Q1 OKRs explicitly state 'No new acquisition channels — CAC efficiency is a Q2 initiative.' The 'retention angle' is a reframe, not a genuine OKR connection."
+      },
+      {
+        "gate": "correlation_vs_causation",
+        "passed": false,
+        "suggestion": "The 74% retention rate for referred users (n=14) is a tiny sample with a strong selection effect — people who refer their peers to a product they love are already your best users. You cannot infer that the referral mechanism itself causes higher retention."
+      }
+    ],
+    "adversarial": {
+      "riskLevel": "high",
+      "concerns": [
+        "The 'retention angle' argument (paragraph 4) is constructed post-hoc to justify acquisition work in a retention quarter. The deliverables — referral links, SEO articles, lead capture forms, email nurture sequences — are unambiguously acquisition infrastructure.",
+        "Q1 OKRs include 'Explicitly not in strategy: New acquisition channels or paid marketing campaigns.' This brief proposes two new acquisition channels.",
+        "The n=14 referred-user retention sample cited as evidence represents 0.17% of active users. No confidence interval. No control group. This should not drive a 6-week engineering investment.",
+        "Using 2 engineers coming off INFRA-71 as a justification ('they have capacity') is a resource availability argument, not a strategy argument. Available capacity should go to O2 (retention) work in a retention quarter."
+      ]
+    },
+    "drift": {
+      "aligned": false,
+      "driftScore": 78,
+      "analysis": "This brief is substantially misaligned with Q1 OKRs. Both pillars target new user acquisition — a strategic category the company explicitly de-prioritized for Q1. The author attempts to reframe the work as a retention play using a small, uncontrolled sample (n=14). Even if the retention correlation were robust, the deliverables (SEO content, referral emails, lead capture) do not address the root causes of the retention problem identified in the OKRs: low onboarding completion (31%), slow time-to-value (4.2 days), and low highly-engaged user rate (28%). This work would divert 2 engineers and 1 designer from the Q1 retention OKR for 6 weeks with no direct O2 impact.",
+      "driftedObjectives": [
+        "O2: Improve 30-day and 90-day retention (all 3 KRs — zero deliverables address root causes)",
+        "O1: Improve activation (brief explicitly excludes 'changes to core product onboarding flow')"
+      ],
+      "alignedObjectives": [],
+      "recommendation": "Revisit in Q2 when acquisition is back on the roadmap. In Q1, redirect engineer capacity to notification engagement feature (O2-KR3) or onboarding checklist completion (O1-KR3)."
+    }
+  }
+}

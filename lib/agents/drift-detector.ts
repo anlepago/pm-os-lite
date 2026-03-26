@@ -44,12 +44,16 @@ const StrategicSignalsSchema = z.object({
    * Beliefs about users or the market that must be true for this to succeed.
    * Extracted as discrete statements to enable assumption-level comparison.
    */
-  keyAssumptions: z.array(z.string()),
+  keyAssumptions: z.union([z.array(z.string()), z.string()]).transform((v) =>
+    typeof v === "string" ? v.split(/\n|;\s*/).map((s) => s.trim()).filter(Boolean) : v
+  ),
   /**
    * Directional bets: "we believe that X approach will outperform Y approach."
    * Distinct from assumptions (beliefs about the world) vs. bets (choices about strategy).
    */
-  strategicBets: z.array(z.string()),
+  strategicBets: z.union([z.array(z.string()), z.string()]).transform((v) =>
+    typeof v === "string" ? v.split(/\n|;\s*/).map((s) => s.trim()).filter(Boolean) : v
+  ),
 });
 
 export type StrategicSignals = z.infer<typeof StrategicSignalsSchema>;
@@ -528,7 +532,7 @@ export async function detectHistoricalDrift(
     const lines = [
       `This PRD has ${previousArtifacts.length} prior version(s). Historical user problems for context:`,
     ];
-    olderHistory.forEach((a, i) => {
+    olderHistory.forEach((_a, i) => {
       lines.push(
         `  v${previousArtifacts.length - 1 - i}: "${historicalSignalSets[i].coreUserProblem}" ` +
           `(outcome: "${historicalSignalSets[i].primaryBusinessOutcome}")`
