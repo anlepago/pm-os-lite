@@ -3,6 +3,28 @@ import { db } from "@/lib/db/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+const GATE_DEFS = [
+  { prefix: "Gate 1", name: "Context Engineering" },
+  { prefix: "Gate 2", name: "Synthetic Evals" },
+  { prefix: "Gate 3", name: "ROI Moat" },
+  { prefix: "Gate 4", name: "NFR Compliance" },
+  { prefix: "Gate 5", name: "Operability" },
+  { prefix: "Gate 6", name: "Success Metrics" },
+];
+
+interface HardGateResultRaw {
+  phase: string;
+  passed: boolean;
+  reason: string;
+}
+
+interface AiEraAuditRaw {
+  evalCredibility?: string;
+  economicDefensibility?: string;
+  operabilityRealism?: string;
+  complianceReadiness?: string;
+}
+
 interface RawReviewRow {
   id: number;
   artifact_id: string | null;
@@ -45,6 +67,7 @@ export async function GET() {
   ]) {
     try { db.exec(`ALTER TABLE review_reports ADD COLUMN ${col}`); } catch { /* exists */ }
   }
+  try { db.exec(`ALTER TABLE drift_comparison_cache ADD COLUMN artifact_label TEXT NOT NULL DEFAULT ''`); } catch { /* exists */ }
 
   const allReviews = db
     .prepare("SELECT * FROM review_reports ORDER BY created_at DESC LIMIT 200")
@@ -166,6 +189,11 @@ export async function GET() {
       driftLookup.get(r.artifact_name) ??
       driftLookup.get(`PRD: ${r.artifact_name}`) ??
       null;
+    const gates = safeParseJSON<HardGateResultRaw[]>(r.hard_gates, []);
+    const gateStatuses = GATE_DEFS.map(({ prefix }) => {
+      const forGate = gates.filter((g) => g.phase.startsWith(prefix));
+      return forGate.length === 0 || forGate.every((g) => g.passed);
+    });
     return {
       id: r.id,
       artifactId: r.artifact_id,
@@ -177,7 +205,44 @@ export async function GET() {
       blocked: r.blocked === 1,
       driftVerdict: drift?.verdict ?? null,
       driftScore: drift?.score ?? null,
+      gateStatuses,
     };
+  });
+
+  // ── Gate health panel ──────────────────────────────────────────────────────
+
+  const gateHealthPanel = GATE_DEFS.map(({ prefix, name }) => {
+    let passed = 0, failed = 0;
+    const failReasonCounts = new Map<string, number>();
+
+    for (const row of allReviews) {
+      const gates = safeParseJSON<HardGateResultRaw[]>(row.hard_gates, []);
+      const forGate = gates.filter((g) => g.phase.startsWith(prefix));
+      if (forGate.length === 0) continue;
+
+      if (forGate.every((g) => g.passed)) {
+        passed++;
+      } else {
+        failed++;
+        for (const g of forGate.filter((g) => !g.passed)) {
+          failReasonCounts.set(g.reason, (failReasonCounts.get(g.reason) ?? 0) + 1);
+        }
+      }
+    }
+
+    const total = passed + failed;
+    const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+    let topFailureReason: string | null = null;
+    let maxCount = 0;
+    for (const [reason, count] of failReasonCounts) {
+      if (count > maxCount) { maxCount = count; topFailureReason = reason; }
+    }
+    if (topFailureReason && topFailureReason.length > 120) {
+      topFailureReason = topFailureReason.slice(0, 117) + "…";
+    }
+
+    return { prefix, name, passed, failed, total, passRate, topFailureReason };
   });
 
   // ── Findings aggregate ─────────────────────────────────────────────────────
@@ -194,6 +259,37 @@ export async function GET() {
   const findingsAggregate = Array.from(findingMap.entries())
     .map(([findingType, count]) => ({ findingType, count }))
     .sort((a, b) => b.count - a.count);
+
+  // ── AI-era audit aggregate ─────────────────────────────────────────────────
+
+  const aiEraAuditAggregate = {
+    evalCredibility: { credible: 0, questionable: 0, missing: 0 },
+    economicDefensibility: { strong: 0, weak: 0, missing: 0 },
+    operabilityRealism: { realistic: 0, optimistic: 0, missing: 0 },
+    complianceReadiness: { ready: 0, gaps: 0, missing: 0 },
+  };
+
+  for (const row of allReviews) {
+    const review = safeParseJSON<{ aiEraAudit?: AiEraAuditRaw }>(row.adversarial_review, {});
+    const audit = review.aiEraAudit;
+    if (!audit) continue;
+
+    const ec = audit.evalCredibility;
+    if (ec === "credible" || ec === "questionable" || ec === "missing") aiEraAuditAggregate.evalCredibility[ec]++;
+    else aiEraAuditAggregate.evalCredibility.missing++;
+
+    const ed = audit.economicDefensibility;
+    if (ed === "strong" || ed === "weak" || ed === "missing") aiEraAuditAggregate.economicDefensibility[ed]++;
+    else aiEraAuditAggregate.economicDefensibility.missing++;
+
+    const or_ = audit.operabilityRealism;
+    if (or_ === "realistic" || or_ === "optimistic" || or_ === "missing") aiEraAuditAggregate.operabilityRealism[or_]++;
+    else aiEraAuditAggregate.operabilityRealism.missing++;
+
+    const cr = audit.complianceReadiness;
+    if (cr === "ready" || cr === "gaps" || cr === "missing") aiEraAuditAggregate.complianceReadiness[cr]++;
+    else aiEraAuditAggregate.complianceReadiness.missing++;
+  }
 
   // ── Drift heatmap ──────────────────────────────────────────────────────────
 
@@ -226,8 +322,10 @@ export async function GET() {
     },
     timeline,
     gateBreakdown,
+    gateHealthPanel,
     recentReviews,
     findingsAggregate,
     driftHeatmap,
+    aiEraAuditAggregate,
   });
 }

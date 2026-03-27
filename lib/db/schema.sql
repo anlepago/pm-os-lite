@@ -87,10 +87,34 @@ CREATE TABLE IF NOT EXISTS reviews (
   softGatesJson   TEXT NOT NULL DEFAULT '[]',          -- JSON: SoftGateResult[]
   adversarialJson TEXT NOT NULL DEFAULT '{}',          -- JSON: AdversarialReview
   driftJson       TEXT NOT NULL DEFAULT '{}',          -- JSON: DriftAnalysis
-  reviewedAt      TEXT NOT NULL DEFAULT (datetime('now'))
+  reviewedAt      TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Gate-level pass/fail (1=passed, 0=failed, NULL=not applicable)
+  gate1_passed              INTEGER,
+  gate2_passed              INTEGER,
+  gate3_passed              INTEGER,
+  gate4_passed              INTEGER,
+  gate5_passed              INTEGER,
+  gate6_passed              INTEGER,
+  -- AI-era audit fields extracted from adversarialJson
+  ai_era_audit_json         TEXT,                     -- JSON: aiEraAudit object
+  eval_credibility          TEXT,                     -- 'credible' | 'questionable' | 'missing'
+  economic_defensibility    TEXT,                     -- 'strong' | 'weak' | 'missing'
+  operability_realism       TEXT,                     -- 'realistic' | 'optimistic' | 'missing'
+  compliance_readiness      TEXT                      -- 'ready' | 'gaps' | 'missing'
 );
 
 CREATE INDEX IF NOT EXISTS reviews_artifact_idx ON reviews (artifactId, reviewedAt DESC);
+
+-- Gate health summary: pass rate (0–100) per gate across all reviews with gate data
+CREATE VIEW IF NOT EXISTS gate_health_summary AS
+SELECT
+  CAST(ROUND(100.0 * SUM(gate1_passed) / NULLIF(COUNT(gate1_passed), 0)) AS INTEGER) AS gate1_rate,
+  CAST(ROUND(100.0 * SUM(gate2_passed) / NULLIF(COUNT(gate2_passed), 0)) AS INTEGER) AS gate2_rate,
+  CAST(ROUND(100.0 * SUM(gate3_passed) / NULLIF(COUNT(gate3_passed), 0)) AS INTEGER) AS gate3_rate,
+  CAST(ROUND(100.0 * SUM(gate4_passed) / NULLIF(COUNT(gate4_passed), 0)) AS INTEGER) AS gate4_rate,
+  CAST(ROUND(100.0 * SUM(gate5_passed) / NULLIF(COUNT(gate5_passed), 0)) AS INTEGER) AS gate5_rate,
+  CAST(ROUND(100.0 * SUM(gate6_passed) / NULLIF(COUNT(gate6_passed), 0)) AS INTEGER) AS gate6_rate
+FROM reviews;
 
 -- OKR baselines: one active baseline at a time used for drift detection
 CREATE TABLE IF NOT EXISTS okr_baselines (
@@ -124,3 +148,14 @@ CREATE TRIGGER IF NOT EXISTS artifacts_updated_at
   BEGIN
     UPDATE artifacts SET updatedAt = datetime('now') WHERE id = NEW.id;
   END;
+
+-- Drift comparison cache: stores drift detection results keyed by artifact+OKR pair
+CREATE TABLE IF NOT EXISTS drift_comparison_cache (
+  pair_hash      TEXT PRIMARY KEY,              -- SHA-256 of artifact+OKR content hashes
+  artifact_label TEXT NOT NULL,                 -- human-readable label for lookups
+  result_json    TEXT NOT NULL,                 -- JSON: DriftResult
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS drift_cache_label_idx ON drift_comparison_cache (artifact_label, created_at DESC);
+CREATE INDEX IF NOT EXISTS drift_cache_created_idx ON drift_comparison_cache (created_at DESC);

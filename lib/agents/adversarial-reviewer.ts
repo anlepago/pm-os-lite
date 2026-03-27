@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropic } from "./client";
 import { db } from "@/lib/db/client";
 import type { PRD } from "@/lib/schemas/prd.schema";
+import type { HardGateResult } from "@/lib/gates/hard-gates";
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,11 @@ export const AdversarialFindingSchema = z.object({
     "vanity_metric",    // metric that looks good but doesn't prove value
     "missing_evidence", // claim made without supporting data or research
     "scope_risk",       // scope boundary that is likely to be violated
+    "eval_integrity",   // eval dataset is unrepresentative or scores are inflated
+    "tco_defensibility",// TCO figures are optimistic or ROI moat is weak
+    "nfr_gap",          // compliance, PII, or explainability requirement is missing
+    "operability_risk", // pilot scope, timeline, or fallback plan is unrealistic
+    "monitoring_gap",   // metric cannot be measured in production or can be gamed
   ]),
 
   /** Plain-language description of the problem. */
@@ -59,6 +65,18 @@ export const AdversarialReviewSchema = z.object({
 
   /** Sections or claims that are genuinely well-defined — balance the critique. */
   strengthSignals: z.array(z.string()),
+
+  /** AI-era audit verdicts across the four dimensions most likely to cause late-stage failure. */
+  aiEraAudit: z.object({
+    /** Are the eval scores credible and the dataset representative? */
+    evalCredibility: z.enum(["credible", "questionable", "missing"]),
+    /** Is the TCO realistic and the ROI moat actually defensible? */
+    economicDefensibility: z.enum(["strong", "weak", "missing"]),
+    /** Is the 90-day pilot realistic and the scope mechanism enforceable? */
+    operabilityRealism: z.enum(["realistic", "optimistic", "missing"]),
+    /** Are compliance frameworks and PII handling real, not theoretical? */
+    complianceReadiness: z.enum(["ready", "gaps", "missing"]),
+  }),
 });
 
 export type AdversarialFinding = z.infer<typeof AdversarialFindingSchema>;
@@ -66,6 +84,17 @@ export type AdversarialReview = z.infer<typeof AdversarialReviewSchema>;
 
 /** PRDArtifact is a PRD schema type (aliased for readability at call sites). */
 export type PRDArtifact = PRD;
+
+/**
+ * AdversarialReviewResult — the full result returned by reviewArtifact().
+ * Extends AdversarialReview with a computed recommendation and quality score.
+ */
+export type AdversarialReviewResult = AdversarialReview & {
+  /** Overall recommendation derived by computeRecommendation(). */
+  recommendation: "approve" | "revise" | "reject";
+  /** 0–100 quality score computed from finding severities. */
+  qualityScore: number;
+};
 
 // ── Token usage log ───────────────────────────────────────────────────────────
 
@@ -154,20 +183,31 @@ function hashArtifact(artifact: PRDArtifact): string {
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a skeptical VP of Product with 15 years of experience watching promising products fail. You have seen every PM mistake in the book: scope creep disguised as vision, vanity metrics dressed up as success criteria, user research that confirms what the team already believed, and dependencies that were "almost certain" until they weren't.
+const SYSTEM_PROMPT = `You are a skeptical VP of Product with 15 years of experience watching promising AI-era products fail. You have seen every PM mistake: scope creep disguised as vision, vanity metrics dressed up as success criteria, eval scores cherry-picked from a non-representative dataset, TCO figures that ignore ongoing model costs, and compliance sections copy-pasted from last quarter's PRD.
 
-Your job is to stress-test this PRD before the team commits engineering time to it. You are hostile to weak thinking but constructive in your feedback — your goal is to make this product succeed, not to kill it.
+Your job is to stress-test this PRD across six gates before the team commits engineering time. You are hostile to weak thinking but constructive — your goal is to make this product succeed, not to kill it.
 
-For every section of the PRD, ask yourself: "What assumption is being made here? Is it stated? Is there evidence for it? What happens to this whole plan if this assumption is wrong?"
+Audit across these six dimensions:
 
-Look specifically for:
-- CIRCULAR REASONING: when the problem statement and the proposed solution are the same claim restated
-- VANITY METRICS: metrics that will always go up regardless of real value delivered (e.g., "page views", "feature adoption" without retention signal)
-- SOLUTION-FIRST THINKING: requirements that presuppose a specific implementation rather than describing an outcome
-- MISSING USER RESEARCH SIGNALS: target user descriptions without behavioural evidence, pain points stated as facts without supporting data
-- OPTIMISTIC DEPENDENCIES: dependency lists that underestimate coordination cost, or assume other teams will deliver on time
+GATE 1 — EVIDENCE-GROUNDED PROBLEM
+Is the problem grounded in real data, or assumed? Look for: circular reasoning (problem statement restates the solution), pain points stated as facts without supporting signals, user segments too generic to guide design. Ask: "What breaks if this assumption is wrong?"
 
-You must use the submit_review tool to return your findings. Do not write prose. Every finding must include the hard question the PM should answer to resolve it.`;
+GATE 2 — EVAL INTEGRITY
+Are the AI eval scores credible? Is the dataset representative of production traffic, or cherry-picked for high scores? Is the groundedness threshold actually meaningful for this use case, or just easy to hit? Are eval runs fresh enough to reflect the current model and prompt? Flag eval_integrity when scores look good on paper but the methodology is weak.
+
+GATE 3 — TCO DEFENSIBILITY
+Is the three-year TCO realistic? Does it include ongoing model inference costs, retraining, prompt engineering maintenance, and human-in-the-loop overhead? Is the ROI moat actually defensible — i.e., would a well-funded competitor be unable to replicate this in 6 months? A "we have proprietary data" moat claim requires evidence of that data's uniqueness. Flag tco_defensibility for optimistic cost projections or thin moat arguments.
+
+GATE 4 — COMPLIANCE REALITY
+Are the compliance frameworks listed ones the team has actually been audited against, or aspirational? Is PII handling described with enough specificity for a security review, or is it theoretical ("we follow GDPR")? Is the explainability level appropriate for the regulatory environment this product will operate in? Flag nfr_gap for theoretical compliance claims.
+
+GATE 5 — OPERABILITY REALISM
+Is the 90-day pilot realistic given the stated scope? Is there a concrete mechanism to enforce scope limits, or just a stated intention? Is the fallback plan specific enough for an on-call engineer to execute at 2am, or is it a vague rollback promise? Flag operability_risk for pilots that will inevitably drift or fallbacks that won't work under pressure.
+
+GATE 6 — METRIC MEASURABILITY
+Can these metrics actually be measured in production with the named tooling? Can any of them be gamed (e.g., a "task completion rate" metric that counts button clicks, not outcomes)? Does each metric have a degradation threshold that would trigger a response before the feature causes real harm? Flag monitoring_gap for metrics that sound rigorous but cannot be operationalised.
+
+You must use the submit_review tool to return your findings. Do not write prose. Every finding must include the hard question the PM must answer to resolve it. For aiEraAudit, rate each dimension based on what is actually present in the PRD — use "missing" when a section is absent entirely, not just when it is weak.`;
 
 // ── Tool schema (passed to Claude) ───────────────────────────────────────────
 
@@ -177,7 +217,7 @@ const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
     "Submit the complete adversarial review. Call this once with all findings.",
   input_schema: {
     type: "object" as const,
-    required: ["overallRisk", "findings", "redFlags", "strengthSignals"],
+    required: ["overallRisk", "findings", "redFlags", "strengthSignals", "aiEraAudit"],
     properties: {
       overallRisk: {
         type: "string",
@@ -198,7 +238,18 @@ const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
             },
             findingType: {
               type: "string",
-              enum: ["assumption", "contradiction", "vanity_metric", "missing_evidence", "scope_risk"],
+              enum: [
+                "assumption",
+                "contradiction",
+                "vanity_metric",
+                "missing_evidence",
+                "scope_risk",
+                "eval_integrity",
+                "tco_defensibility",
+                "nfr_gap",
+                "operability_risk",
+                "monitoring_gap",
+              ],
             },
             description: {
               type: "string",
@@ -226,6 +277,33 @@ const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
         type: "array",
         description: "Things in this PRD that are genuinely well-defined and should be preserved. Be honest — do not manufacture praise.",
         items: { type: "string" },
+      },
+      aiEraAudit: {
+        type: "object",
+        description: "AI-era audit verdicts. Use 'missing' only when the relevant section is entirely absent.",
+        required: ["evalCredibility", "economicDefensibility", "operabilityRealism", "complianceReadiness"],
+        properties: {
+          evalCredibility: {
+            type: "string",
+            enum: ["credible", "questionable", "missing"],
+            description: "Are the eval scores credible and the dataset representative?",
+          },
+          economicDefensibility: {
+            type: "string",
+            enum: ["strong", "weak", "missing"],
+            description: "Is the TCO realistic and the ROI moat actually defensible?",
+          },
+          operabilityRealism: {
+            type: "string",
+            enum: ["realistic", "optimistic", "missing"],
+            description: "Is the 90-day pilot realistic and the scope mechanism enforceable?",
+          },
+          complianceReadiness: {
+            type: "string",
+            enum: ["ready", "gaps", "missing"],
+            description: "Are compliance frameworks and PII handling real, not theoretical?",
+          },
+        },
       },
     },
   },
@@ -270,19 +348,79 @@ function serialisePRD(artifact: PRDArtifact): string {
   return lines.join("\n");
 }
 
+// ── Recommendation logic ──────────────────────────────────────────────────────
+
+/**
+ * computeQualityScore — derives a 0–100 score from finding severities.
+ *
+ * Penalties: severity 1 = −3, severity 2 = −8, severity 3 = −20.
+ * Score is clamped to [0, 100].
+ */
+function computeQualityScore(review: AdversarialReview): number {
+  let score = 100;
+  for (const f of review.findings) {
+    if (f.severity === 1) score -= 3;
+    else if (f.severity === 2) score -= 8;
+    else if (f.severity === 3) score -= 20;
+  }
+  return Math.max(0, score);
+}
+
+/**
+ * computeRecommendation — derives a recommendation and quality score from a review.
+ *
+ * Decision tree (evaluated in order):
+ * - "reject"  if any hard gate failed, overallRisk=critical, evalCredibility=missing,
+ *             or economicDefensibility=missing
+ * - "revise"  if qualityScore < 65, criticalFindings ≥ 1, or overallRisk=high
+ * - "approve" otherwise
+ */
+export function computeRecommendation(
+  review: AdversarialReview,
+  hardGateResults?: HardGateResult[]
+): { recommendation: "approve" | "revise" | "reject"; qualityScore: number } {
+  const qualityScore = computeQualityScore(review);
+  const blocked = (hardGateResults ?? []).some((r) => !r.passed);
+  const criticalFindings = review.findings.filter((f) => f.severity === 3).length;
+
+  if (
+    blocked ||
+    review.overallRisk === "critical" ||
+    review.aiEraAudit.evalCredibility === "missing" ||
+    review.aiEraAudit.economicDefensibility === "missing"
+  ) {
+    return { recommendation: "reject", qualityScore };
+  }
+
+  if (qualityScore < 65 || criticalFindings >= 1 || review.overallRisk === "high") {
+    return { recommendation: "revise", qualityScore };
+  }
+
+  return { recommendation: "approve", qualityScore };
+}
+
 // ── Main function ─────────────────────────────────────────────────────────────
 
 /**
  * reviewArtifact — run an adversarial review against a PRD artifact.
  *
  * Cache behaviour:
- * - Hit: returns the cached result instantly, no API call made.
+ * - Hit: returns the cached AdversarialReview instantly, no API call made.
+ *        recommendation and qualityScore are always recomputed from the current hardGateResults.
  * - Miss: calls Claude, validates the response, stores in cache, returns result.
+ *
+ * @param artifact       The PRD to review.
+ * @param hardGateResults Optional results from a prior hard-gate run. Failed gates are
+ *                        included as context in the user message so the reviewer can look
+ *                        beyond what the deterministic checks already caught.
  *
  * @throws {Error} if the API call fails or the response cannot be parsed.
  *                 Callers should handle this and surface a degraded UI state.
  */
-export async function reviewArtifact(artifact: PRDArtifact): Promise<AdversarialReview> {
+export async function reviewArtifact(
+  artifact: PRDArtifact,
+  hardGateResults?: HardGateResult[]
+): Promise<AdversarialReviewResult> {
   const hash = hashArtifact(artifact);
 
   // ── Cache hit ──
@@ -291,12 +429,24 @@ export async function reviewArtifact(artifact: PRDArtifact): Promise<Adversarial
     console.log(
       `[adversarial-reviewer] cache HIT — hash: ${hash.slice(0, 12)} (${artifact.title})`
     );
-    return cached;
+    const { recommendation, qualityScore } = computeRecommendation(cached, hardGateResults);
+    return { ...cached, recommendation, qualityScore };
   }
 
   console.log(
     `[adversarial-reviewer] cache MISS — calling ${ADVERSARIAL_MODEL} for: ${artifact.title}`
   );
+
+  // ── Build user message — include failed gate context so the reviewer looks beyond them ──
+  const failedGates = (hardGateResults ?? []).filter((r) => !r.passed);
+  const gateContext =
+    failedGates.length > 0
+      ? `\n\n## Already-Failed Hard Gates\nThe following deterministic gate checks have already failed. Do not duplicate these findings — focus your adversarial review on issues the gates did not catch.\n${failedGates
+          .map((g) => `- [${g.gateId}] ${g.gateName} (${g.phase}): ${g.reason}`)
+          .join("\n")}`
+      : "";
+
+  const userMessage = `Please review the following PRD and submit your findings using the submit_review tool.${gateContext}\n\n${serialisePRD(artifact)}`;
 
   // ── API call ──
   let response: Anthropic.Message;
@@ -311,7 +461,7 @@ export async function reviewArtifact(artifact: PRDArtifact): Promise<Adversarial
       messages: [
         {
           role: "user",
-          content: `Please review the following PRD and submit your findings using the submit_review tool.\n\n${serialisePRD(artifact)}`,
+          content: userMessage,
         },
       ],
     });
@@ -355,5 +505,6 @@ export async function reviewArtifact(artifact: PRDArtifact): Promise<Adversarial
 
   // ── Cache and return ──
   cacheReview(hash, parsed.data, usage);
-  return parsed.data;
+  const { recommendation, qualityScore } = computeRecommendation(parsed.data, hardGateResults);
+  return { ...parsed.data, recommendation, qualityScore };
 }

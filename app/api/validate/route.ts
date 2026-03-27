@@ -17,10 +17,18 @@ db.exec(`
     completeness_score REAL NOT NULL,
     errors             TEXT NOT NULL DEFAULT '[]',
     field_coverage     TEXT NOT NULL DEFAULT '{}',
+    gate_coverage      TEXT NOT NULL DEFAULT '{}',
     raw_content        TEXT NOT NULL,
     created_at         TEXT NOT NULL DEFAULT (datetime('now'))
   )
 `);
+
+// Add gate_coverage column to existing tables created before this migration.
+try {
+  db.exec(`ALTER TABLE validation_results ADD COLUMN gate_coverage TEXT NOT NULL DEFAULT '{}'`);
+} catch {
+  // Column already exists — safe to ignore.
+}
 
 // ── Persist ───────────────────────────────────────────────────────────────────
 
@@ -31,8 +39,8 @@ function persistResult(
 ): number {
   const stmt = db.prepare(`
     INSERT INTO validation_results
-      (artifact_type, valid, completeness_score, errors, field_coverage, raw_content)
-    VALUES (?, ?, ?, ?, ?, ?)
+      (artifact_type, valid, completeness_score, errors, field_coverage, gate_coverage, raw_content)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   const { lastInsertRowid } = stmt.run(
@@ -41,6 +49,7 @@ function persistResult(
     result.completenessScore,
     JSON.stringify(result.errors),
     JSON.stringify(result.fieldCoverage),
+    JSON.stringify(result.gateCoverage),
     JSON.stringify(content)
   );
 
@@ -128,7 +137,7 @@ export async function GET(request: Request) {
   const rows = artifactType
     ? db
         .prepare(
-          `SELECT id, artifact_type, valid, completeness_score, errors, field_coverage, created_at
+          `SELECT id, artifact_type, valid, completeness_score, errors, field_coverage, gate_coverage, created_at
            FROM validation_results
            WHERE artifact_type = ?
            ORDER BY created_at DESC
@@ -137,7 +146,7 @@ export async function GET(request: Request) {
         .all(artifactType, limit)
     : db
         .prepare(
-          `SELECT id, artifact_type, valid, completeness_score, errors, field_coverage, created_at
+          `SELECT id, artifact_type, valid, completeness_score, errors, field_coverage, gate_coverage, created_at
            FROM validation_results
            ORDER BY created_at DESC
            LIMIT ?`
@@ -150,6 +159,7 @@ export async function GET(request: Request) {
     valid: row.valid === 1,
     errors: JSON.parse(row.errors as string),
     field_coverage: JSON.parse(row.field_coverage as string),
+    gate_coverage: JSON.parse((row.gate_coverage as string) || "{}"),
   }));
 
   return NextResponse.json(results);

@@ -14,6 +14,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 import {
   FileText,
@@ -70,6 +71,24 @@ interface RecentReview {
   blocked: boolean;
   driftVerdict: string | null;
   driftScore: number | null;
+  gateStatuses: boolean[];
+}
+
+interface GateHealthItem {
+  prefix: string;
+  name: string;
+  passed: number;
+  failed: number;
+  total: number;
+  passRate: number;
+  topFailureReason: string | null;
+}
+
+interface AiEraAuditAggregate {
+  evalCredibility: { credible: number; questionable: number; missing: number };
+  economicDefensibility: { strong: number; weak: number; missing: number };
+  operabilityRealism: { realistic: number; optimistic: number; missing: number };
+  complianceReadiness: { ready: number; gaps: number; missing: number };
 }
 
 interface FindingCount {
@@ -88,9 +107,11 @@ interface DashboardData {
   stats: DashboardStats;
   timeline: TimelinePoint[];
   gateBreakdown: GateBreakdownItem[];
+  gateHealthPanel: GateHealthItem[];
   recentReviews: RecentReview[];
   findingsAggregate: FindingCount[];
   driftHeatmap: DriftHeatmapPoint[];
+  aiEraAuditAggregate: AiEraAuditAggregate;
 }
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -297,6 +318,17 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+// ── Gate label map ────────────────────────────────────────────────────────────
+
+const GATE_PHASE_LABELS: Record<string, string> = {
+  "Gate 1": "Gate 1: Context Engineering",
+  "Gate 2": "Gate 2: Synthetic Evals",
+  "Gate 3": "Gate 3: ROI Moat",
+  "Gate 4": "Gate 4: NFR Compliance",
+  "Gate 5": "Gate 5: Operability",
+  "Gate 6": "Gate 6: Success Metrics",
+};
+
 // ── 1. Stat cards ─────────────────────────────────────────────────────────────
 
 function StatCards({
@@ -420,7 +452,106 @@ function StatCards({
   );
 }
 
-// ── 2. Quality timeline ───────────────────────────────────────────────────────
+// ── 2. Gate health panel ──────────────────────────────────────────────────────
+
+function GateHealthPanel({
+  data,
+  loading,
+}: {
+  data: GateHealthItem[];
+  loading: boolean;
+}) {
+  return (
+    <Panel>
+      <SectionHeader
+        icon={ShieldCheck}
+        label="Gate Health Panel"
+        sub="Pass rate per gate across all reviews"
+      />
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+      ) : data.length === 0 ? (
+        <EmptyState message="No gate data yet — submit a PRD to see gate health." />
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {data.map((gate) => {
+            const isGreen = gate.passRate > 80;
+            const isYellow = gate.passRate >= 50 && gate.passRate <= 80;
+            const borderColor = isGreen
+              ? "border-emerald-800"
+              : isYellow
+              ? "border-yellow-800"
+              : "border-red-900";
+            const bgColor = isGreen
+              ? "bg-emerald-950/30"
+              : isYellow
+              ? "bg-yellow-950/30"
+              : "bg-red-950/30";
+            const rateColor = isGreen
+              ? "text-emerald-400"
+              : isYellow
+              ? "text-yellow-400"
+              : "text-red-400";
+            const accentBg = isGreen
+              ? "linear-gradient(90deg, transparent, #22c55e, transparent)"
+              : isYellow
+              ? "linear-gradient(90deg, transparent, #eab308, transparent)"
+              : "linear-gradient(90deg, transparent, #ef4444, transparent)";
+
+            return (
+              <div
+                key={gate.prefix}
+                className={cn(
+                  "relative flex flex-col gap-2 overflow-hidden rounded-lg border p-3",
+                  borderColor,
+                  bgColor
+                )}
+              >
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 h-px opacity-50"
+                  style={{ background: accentBg }}
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#484f58]">
+                    {gate.prefix}
+                  </span>
+                  <span className="text-xs font-semibold leading-tight text-[#e6edf3]">
+                    {gate.name}
+                  </span>
+                  <span className="text-[10px] text-[#484f58]">
+                    {GATE_PHASE_LABELS[gate.prefix] ?? gate.prefix}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className={cn("font-mono text-xl font-bold tabular-nums", rateColor)}>
+                    {gate.passRate}%
+                  </span>
+                </div>
+                <div className="text-[11px] text-[#8b949e]">
+                  {gate.passed}/{gate.total} passed
+                </div>
+                {gate.topFailureReason && (
+                  <div
+                    className="line-clamp-2 text-[10px] leading-snug text-[#484f58]"
+                    title={gate.topFailureReason}
+                  >
+                    {gate.topFailureReason}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ── 3. Quality timeline ───────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function TimelineTooltip({ active, payload }: any) {
@@ -522,7 +653,149 @@ function QualityTimeline({
   );
 }
 
-// ── 3. Gate breakdown ─────────────────────────────────────────────────────────
+// ── 4. AI-era audit panel ─────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function AiEraAuditTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-[#30363d] bg-[#0d1117] p-3 text-xs shadow-xl">
+      <div className="mb-1.5 font-semibold text-[#e6edf3]">{label}</div>
+      {payload.map((p: { name: string; value: number; color: string }) => (
+        <div key={p.name} className="flex items-center gap-2" style={{ color: p.color }}>
+          <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
+          <span className="capitalize">{p.name}:</span>
+          <span className="font-mono font-bold text-[#e6edf3]">{p.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AiEraAuditPanel({
+  data,
+  loading,
+}: {
+  data: AiEraAuditAggregate | null;
+  loading: boolean;
+}) {
+  const chartData = data
+    ? [
+        {
+          name: "Eval Credibility",
+          positive: data.evalCredibility.credible,
+          warning: data.evalCredibility.questionable,
+          missing: data.evalCredibility.missing,
+        },
+        {
+          name: "Econ Defensibility",
+          positive: data.economicDefensibility.strong,
+          warning: data.economicDefensibility.weak,
+          missing: data.economicDefensibility.missing,
+        },
+        {
+          name: "Operability Realism",
+          positive: data.operabilityRealism.realistic,
+          warning: data.operabilityRealism.optimistic,
+          missing: data.operabilityRealism.missing,
+        },
+        {
+          name: "Compliance Readiness",
+          positive: data.complianceReadiness.ready,
+          warning: data.complianceReadiness.gaps,
+          missing: data.complianceReadiness.missing,
+        },
+      ]
+    : [];
+
+  const positiveLabels: Record<string, string> = {
+    "Eval Credibility": "Credible",
+    "Econ Defensibility": "Strong",
+    "Operability Realism": "Realistic",
+    "Compliance Readiness": "Ready",
+  };
+
+  const warningLabels: Record<string, string> = {
+    "Eval Credibility": "Questionable",
+    "Econ Defensibility": "Weak",
+    "Operability Realism": "Optimistic",
+    "Compliance Readiness": "Gaps",
+  };
+
+  const hasData = chartData.some((d) => d.positive + d.warning + d.missing > 0);
+
+  return (
+    <Panel>
+      <SectionHeader
+        icon={BarChart2}
+        label="AI-Era Audit"
+        sub="Aggregate verdicts across all adversarial reviews"
+        right={
+          <div className="flex items-center gap-3">
+            {[
+              { color: "#22c55e", label: "Pass" },
+              { color: "#eab308", label: "Warn" },
+              { color: "#484f58", label: "Missing" },
+            ].map((l) => (
+              <span key={l.label} className="flex items-center gap-1.5 text-[10px] text-[#484f58]">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: l.color }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+        }
+      />
+      {loading ? (
+        <Skeleton className="h-44 w-full" />
+      ) : !hasData ? (
+        <EmptyState message="No AI-era audit data yet — submit a PRD to generate adversarial review data." />
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: -22 }} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fill: CHART_THEME.axis, fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: CHART_THEME.axis, fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip content={<AiEraAuditTooltip />} cursor={{ fill: "#161b22" }} />
+              <Legend
+                wrapperStyle={{ display: "none" }}
+              />
+              <Bar dataKey="positive" name="Pass" fill="#22c55e" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="warning" name="Warn" fill="#eab308" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="missing" name="Missing" fill="#30363d" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+            {chartData.map((d) => (
+              <div key={d.name} className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-[#484f58]">{d.name}</span>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="text-emerald-400">{positiveLabels[d.name]}: {d.positive}</span>
+                  <span className="text-[#30363d]">·</span>
+                  <span className="text-yellow-400">{warningLabels[d.name]}: {d.warning}</span>
+                  <span className="text-[#30363d]">·</span>
+                  <span className="text-[#484f58]">Missing: {d.missing}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+// ── 5. Gate breakdown ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function GateTooltip({ active, payload, label }: any) {
@@ -740,7 +1013,7 @@ function RecentReviewsTable({
         <EmptyState message="No reviews yet — POST to /api/review to run the pipeline." />
       ) : (
         <div className="overflow-x-auto -mx-5 px-5">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-[#21262d]">
                 {[
@@ -749,6 +1022,7 @@ function RecentReviewsTable({
                   "Submitted",
                   "Score",
                   "Recommendation",
+                  "Gates",
                   "Drift",
                   "",
                 ].map((h, i) => (
@@ -800,6 +1074,18 @@ function RecentReviewsTable({
                   </td>
                   <td className="py-3 pr-4">
                     <RecoBadge value={r.recommendation} />
+                  </td>
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-1">
+                      {(r.gateStatuses ?? []).map((passed, gi) => (
+                        <span
+                          key={gi}
+                          className="inline-block h-2.5 w-2.5 rounded-full cursor-default"
+                          style={{ background: passed ? "#22c55e" : "#ef4444" }}
+                          title={`Gate ${gi + 1}: ${["Context Engineering","Synthetic Evals","ROI Moat","NFR Compliance","Operability","Success Metrics"][gi]} — ${passed ? "Passed" : "Failed"}`}
+                        />
+                      ))}
+                    </div>
                   </td>
                   <td className="py-3 pr-4">
                     <DriftBadge verdict={r.driftVerdict} />
@@ -1038,7 +1324,13 @@ export default function DashboardPage() {
           {/* 1. Stat cards */}
           <StatCards stats={data?.stats ?? null} loading={loading} />
 
-          {/* 2. Timeline + Findings */}
+          {/* 2. Gate health panel */}
+          <GateHealthPanel data={data?.gateHealthPanel ?? []} loading={loading} />
+
+          {/* 3. AI-era audit */}
+          <AiEraAuditPanel data={data?.aiEraAuditAggregate ?? null} loading={loading} />
+
+          {/* 4. Timeline + Findings */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
             <div className="xl:col-span-3">
               <QualityTimeline data={data?.timeline ?? []} loading={loading} />
@@ -1051,7 +1343,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 3. Gate breakdown + Drift heatmap */}
+          {/* 5. Gate breakdown + Drift heatmap */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
             <div className="xl:col-span-2">
               <GateBreakdown
@@ -1067,7 +1359,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 4. Recent reviews */}
+          {/* 6. Recent reviews */}
           <RecentReviewsTable
             data={data?.recentReviews ?? []}
             loading={loading}

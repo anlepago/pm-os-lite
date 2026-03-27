@@ -109,11 +109,12 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS drift_comparison_cache (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    pair_hash     TEXT NOT NULL UNIQUE,
-    result_json   TEXT NOT NULL,
-    model         TEXT NOT NULL,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_hash      TEXT NOT NULL UNIQUE,
+    artifact_label TEXT NOT NULL DEFAULT '',
+    result_json    TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
@@ -442,9 +443,9 @@ async function compareDrift(
 
   // Persist
   db.prepare(
-    `INSERT OR REPLACE INTO drift_comparison_cache (pair_hash, result_json, model)
-     VALUES (?, ?, ?)`
-  ).run(pair, JSON.stringify(parsed.data), DRIFT_MODEL);
+    `INSERT OR REPLACE INTO drift_comparison_cache (pair_hash, artifact_label, result_json, model)
+     VALUES (?, ?, ?, ?)`
+  ).run(pair, newLabel, JSON.stringify(parsed.data), DRIFT_MODEL);
 
   return parsed.data;
 }

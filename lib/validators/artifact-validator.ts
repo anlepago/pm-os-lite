@@ -9,6 +9,16 @@ export interface ValidationError {
   field: string;
   message: string;
   severity: "hard" | "soft";
+  gateId?: string;
+}
+
+export interface GateCoverage {
+  gate1_context: boolean;
+  gate2_evals: boolean;
+  gate3_tco: boolean;
+  gate4_nfr: boolean;
+  gate5_operability: boolean;
+  gate6_metrics: boolean;
 }
 
 export interface ValidationResult {
@@ -16,6 +26,7 @@ export interface ValidationResult {
   errors: ValidationError[];
   completenessScore: number;
   fieldCoverage: Record<string, boolean>;
+  gateCoverage: GateCoverage;
 }
 
 // ── Schema registry ───────────────────────────────────────────────────────────
@@ -30,6 +41,56 @@ export type ArtifactTypeName = keyof typeof SCHEMAS;
 
 export function isKnownArtifactType(t: unknown): t is ArtifactTypeName {
   return typeof t === "string" && t in SCHEMAS;
+}
+
+// ── Gate field mapping ────────────────────────────────────────────────────────
+
+/**
+ * Maps top-level field prefixes to the gate they belong to.
+ * A Zod error field is matched by prefix so nested paths
+ * (e.g. "syntheticEval.groundednessScore") resolve correctly.
+ */
+const GATE_PREFIXES: Array<{ prefixes: string[]; gateId: keyof GateCoverage }> = [
+  { prefixes: ["evidenceSignals", "targetUser", "problemStatement"], gateId: "gate1_context" },
+  { prefixes: ["syntheticEval"], gateId: "gate2_evals" },
+  { prefixes: ["tcoAnalysis"], gateId: "gate3_tco" },
+  { prefixes: ["nonFunctionalRequirements"], gateId: "gate4_nfr" },
+  { prefixes: ["operabilityConstraints"], gateId: "gate5_operability" },
+  { prefixes: ["successMetrics"], gateId: "gate6_metrics" },
+];
+
+function fieldToGateId(field: string): keyof GateCoverage | undefined {
+  for (const { prefixes, gateId } of GATE_PREFIXES) {
+    if (prefixes.some((p) => field === p || field.startsWith(`${p}.`))) {
+      return gateId;
+    }
+  }
+  return undefined;
+}
+
+// ── Gate coverage ─────────────────────────────────────────────────────────────
+
+/**
+ * A gate is green (true) if none of its hard errors fired.
+ * For non-PRD artifacts all gates default to true (gates don't apply).
+ */
+function computeGateCoverage(hardErrors: ValidationError[]): GateCoverage {
+  const coverage: GateCoverage = {
+    gate1_context: true,
+    gate2_evals: true,
+    gate3_tco: true,
+    gate4_nfr: true,
+    gate5_operability: true,
+    gate6_metrics: true,
+  };
+
+  for (const error of hardErrors) {
+    if (error.gateId) {
+      coverage[error.gateId] = false;
+    }
+  }
+
+  return coverage;
 }
 
 // ── Field coverage ────────────────────────────────────────────────────────────
@@ -116,16 +177,19 @@ type SoftRule = (content: Record<string, unknown>) => ValidationError | null;
 function softRule(
   check: (c: Record<string, unknown>) => boolean,
   field: string,
-  message: string
+  message: string,
+  gateId?: keyof GateCoverage
 ): SoftRule {
-  return (content) => (check(content) ? { field, message, severity: "soft" } : null);
+  return (content) =>
+    check(content) ? { field, message, severity: "soft", gateId } : null;
 }
 
 const PRD_SOFT_RULES: SoftRule[] = [
   softRule(
     (c) => typeof c.problemStatement === "string" && c.problemStatement.length < 200,
     "problemStatement",
-    "Problem statement is brief (<200 chars). Consider adding quantitative evidence and affected user count."
+    "Problem statement is brief (<200 chars). Consider adding quantitative evidence and affected user count.",
+    "gate1_context"
   ),
   softRule(
     (c) => {
@@ -133,7 +197,8 @@ const PRD_SOFT_RULES: SoftRule[] = [
       return Array.isArray(tu?.painPoints) && tu.painPoints.length === 1;
     },
     "targetUser.painPoints",
-    "Only one pain point listed. Additional pain points help cover edge-case user segments."
+    "Only one pain point listed. Additional pain points help cover edge-case user segments.",
+    "gate1_context"
   ),
   softRule(
     (c) => {
@@ -141,12 +206,14 @@ const PRD_SOFT_RULES: SoftRule[] = [
       return typeof tu?.jobToBeDone === "string" && tu.jobToBeDone.length < 40;
     },
     "targetUser.jobToBeDone",
-    "Job-to-be-done is vague. Aim for a complete sentence describing the underlying goal."
+    "Job-to-be-done is vague. Aim for a complete sentence describing the underlying goal.",
+    "gate1_context"
   ),
   softRule(
     (c) => Array.isArray(c.successMetrics) && c.successMetrics.length === 1,
     "successMetrics",
-    "A single success metric risks missing important dimensions (e.g., retention vs. adoption)."
+    "A single success metric risks missing important dimensions (e.g., retention vs. adoption).",
+    "gate6_metrics"
   ),
   softRule(
     (c) => Array.isArray(c.outOfScope) && c.outOfScope.length === 2,
@@ -258,11 +325,15 @@ const SOFT_RULES: Record<ArtifactTypeName, SoftRule[]> = {
 // ── Zod error → hard ValidationError ─────────────────────────────────────────
 
 function zodErrorsToHard(err: ZodError): ValidationError[] {
-  return err.errors.map((issue) => ({
-    field: issue.path.join(".") || "(root)",
-    message: issue.message,
-    severity: "hard" as const,
-  }));
+  return err.errors.map((issue) => {
+    const field = issue.path.join(".") || "(root)";
+    return {
+      field,
+      message: issue.message,
+      severity: "hard" as const,
+      gateId: fieldToGateId(field),
+    };
+  });
 }
 
 // ── Main validator ────────────────────────────────────────────────────────────
@@ -298,11 +369,13 @@ export function validateArtifact(
 
   const fieldCoverage = flattenCoverage(rawContent);
   const completenessScore = computeCompletenessScore(fieldCoverage, softErrors);
+  const gateCoverage = computeGateCoverage(hardErrors);
 
   return {
     valid: parseResult.success,
     errors: [...hardErrors, ...softErrors],
     completenessScore,
     fieldCoverage,
+    gateCoverage,
   };
 }
