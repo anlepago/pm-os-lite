@@ -13,31 +13,36 @@ const GATE_DEFS = [
 ];
 
 interface HardGateResultRaw {
-  phase: string;
+  phase?: string;
   passed: boolean;
-  reason: string;
-}
-
-interface AiEraAuditRaw {
-  evalCredibility?: string;
-  economicDefensibility?: string;
-  operabilityRealism?: string;
-  complianceReadiness?: string;
+  reason?: string;
+  gateName?: string;
 }
 
 interface RawReviewRow {
-  id: number;
-  artifact_id: string | null;
-  artifact_name: string;
-  artifact_type: string;
-  timestamp: string;
-  hard_gates: string;
-  soft_gates: string;
-  adversarial_review: string;
-  quality_score: number;
+  id: string;
+  artifactId: string | null;
+  qualityScore: number | null;
   recommendation: string;
   blocked: number;
-  created_at: string;
+  hardGatesJson: string;
+  softGatesJson: string;
+  adversarialJson: string;
+  driftJson: string;
+  reviewedAt: string;
+  gate1_passed: number | null;
+  gate2_passed: number | null;
+  gate3_passed: number | null;
+  gate4_passed: number | null;
+  gate5_passed: number | null;
+  gate6_passed: number | null;
+  eval_credibility: string | null;
+  economic_defensibility: string | null;
+  operability_realism: string | null;
+  compliance_readiness: string | null;
+  // from JOIN
+  artifactTitle: string | null;
+  artifactType: string | null;
 }
 
 interface RawDriftRow {
@@ -60,17 +65,18 @@ function isoDateOnly(isoString: string): string {
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET() {
-  // Ensure migration columns exist for older DBs
-  for (const col of [
-    "artifact_name TEXT NOT NULL DEFAULT 'Unknown'",
-    "artifact_type TEXT NOT NULL DEFAULT 'prd'",
-  ]) {
-    try { db.exec(`ALTER TABLE review_reports ADD COLUMN ${col}`); } catch { /* exists */ }
-  }
   try { db.exec(`ALTER TABLE drift_comparison_cache ADD COLUMN artifact_label TEXT NOT NULL DEFAULT ''`); } catch { /* exists */ }
 
   const allReviews = db
-    .prepare("SELECT * FROM review_reports ORDER BY created_at DESC LIMIT 200")
+    .prepare(`
+      SELECT r.*,
+             a.title       AS artifactTitle,
+             a.artifactType
+      FROM reviews r
+      LEFT JOIN artifacts a ON a.id = r.artifactId
+      ORDER BY r.reviewedAt DESC
+      LIMIT 200
+    `)
     .all() as RawReviewRow[];
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -79,24 +85,26 @@ export async function GET() {
 
   const avgQualityScore =
     totalArtifacts > 0
-      ? Math.round(allReviews.reduce((s, r) => s + r.quality_score, 0) / totalArtifacts)
+      ? Math.round(
+          allReviews.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / totalArtifacts
+        )
       : 0;
 
   // Trend: compare avg of last 7 days vs the 7 days before that
   const now = Date.now();
   const day = 86_400_000;
   const last7 = allReviews.filter(
-    (r) => new Date(r.created_at).getTime() > now - 7 * day
+    (r) => new Date(r.reviewedAt).getTime() > now - 7 * day
   );
   const prev7 = allReviews.filter((r) => {
-    const t = new Date(r.created_at).getTime();
+    const t = new Date(r.reviewedAt).getTime();
     return t > now - 14 * day && t <= now - 7 * day;
   });
   const last7Avg = last7.length
-    ? last7.reduce((s, r) => s + r.quality_score, 0) / last7.length
+    ? last7.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / last7.length
     : 0;
   const prev7Avg = prev7.length
-    ? prev7.reduce((s, r) => s + r.quality_score, 0) / prev7.length
+    ? prev7.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / prev7.length
     : 0;
   const qualityScoreTrend = Math.round(last7Avg - prev7Avg);
 
@@ -104,7 +112,7 @@ export async function GET() {
   let gateTotal = 0;
   let gatePassed = 0;
   for (const row of allReviews) {
-    const gates = safeParseJSON<{ passed: boolean }[]>(row.hard_gates, []);
+    const gates = safeParseJSON<{ passed: boolean }[]>(row.hardGatesJson, []);
     gateTotal += gates.length;
     gatePassed += gates.filter((g) => g.passed).length;
   }
@@ -125,16 +133,15 @@ export async function GET() {
 
   // ── Quality timeline ───────────────────────────────────────────────────────
 
-  // Up to 60 most recent reviews, grouped for the chart
   const timeline = allReviews
     .slice(0, 60)
-    .reverse() // oldest first for chart
+    .reverse()
     .map((r, i) => ({
       index: i + 1,
-      date: isoDateOnly(r.timestamp),
-      artifactName: r.artifact_name,
-      artifactType: r.artifact_type,
-      qualityScore: r.quality_score,
+      date: isoDateOnly(r.reviewedAt),
+      artifactName: r.artifactTitle ?? "Unknown",
+      artifactType: r.artifactType ?? "prd",
+      qualityScore: r.qualityScore ?? 0,
       recommendation: r.recommendation,
       id: r.id,
     }));
@@ -143,39 +150,33 @@ export async function GET() {
 
   const gateMap = new Map<string, { passed: number; failed: number }>();
   for (const row of allReviews) {
-    const gates = safeParseJSON<{ gateName: string; passed: boolean }[]>(
-      row.hard_gates,
-      []
-    );
+    const gates = safeParseJSON<HardGateResultRaw[]>(row.hardGatesJson, []);
     for (const g of gates) {
-      const entry = gateMap.get(g.gateName) ?? { passed: 0, failed: 0 };
+      const label = g.gateName ?? g.phase ?? "Unknown";
+      const entry = gateMap.get(label) ?? { passed: 0, failed: 0 };
       g.passed ? entry.passed++ : entry.failed++;
-      gateMap.set(g.gateName, entry);
+      gateMap.set(label, entry);
     }
   }
   const gateBreakdown = Array.from(gateMap.entries())
     .map(([gateName, counts]) => ({
-      gateName: gateName.replace(/([A-Z])/g, " $1").trim(), // camelCase → words
+      gateName: gateName.replace(/([A-Z])/g, " $1").trim(),
       passed: counts.passed,
       failed: counts.failed,
       total: counts.passed + counts.failed,
       passRate: Math.round((counts.passed / (counts.passed + counts.failed)) * 100),
     }))
-    .sort((a, b) => a.passRate - b.passRate); // worst gates first
+    .sort((a, b) => a.passRate - b.passRate);
 
   // ── Recent reviews ─────────────────────────────────────────────────────────
 
-  // For drift verdict, look up by artifact_id in drift cache
   const driftLookup = new Map<string, { verdict: string; score: number }>();
   const allDrift = db
     .prepare("SELECT artifact_label, result_json FROM drift_comparison_cache ORDER BY created_at DESC")
     .all() as Pick<RawDriftRow, "artifact_label" | "result_json">[];
 
   for (const d of allDrift) {
-    const parsed = safeParseJSON<{ verdict?: string; driftScore?: number }>(
-      d.result_json,
-      {}
-    );
+    const parsed = safeParseJSON<{ verdict?: string; driftScore?: number }>(d.result_json, {});
     if (!driftLookup.has(d.artifact_label)) {
       driftLookup.set(d.artifact_label, {
         verdict: parsed.verdict ?? "unknown",
@@ -185,22 +186,32 @@ export async function GET() {
   }
 
   const recentReviews = allReviews.slice(0, 10).map((r) => {
+    const title = r.artifactTitle ?? "Unknown";
     const drift =
-      driftLookup.get(r.artifact_name) ??
-      driftLookup.get(`PRD: ${r.artifact_name}`) ??
+      driftLookup.get(title) ??
+      driftLookup.get(`PRD: ${title}`) ??
       null;
-    const gates = safeParseJSON<HardGateResultRaw[]>(r.hard_gates, []);
-    const gateStatuses = GATE_DEFS.map(({ prefix }) => {
-      const forGate = gates.filter((g) => g.phase.startsWith(prefix));
+
+    // Build gate statuses from stored gate columns, falling back to JSON parse
+    const gateStatuses = GATE_DEFS.map((_, idx) => {
+      const gateNum = idx + 1;
+      const storedVal = r[`gate${gateNum}_passed` as keyof RawReviewRow] as number | null;
+      if (storedVal !== null && storedVal !== undefined) {
+        return storedVal === 1;
+      }
+      // fallback: parse JSON
+      const gates = safeParseJSON<HardGateResultRaw[]>(r.hardGatesJson, []);
+      const forGate = gates.filter((g) => g.phase?.startsWith(GATE_DEFS[idx].prefix));
       return forGate.length === 0 || forGate.every((g) => g.passed);
     });
+
     return {
       id: r.id,
-      artifactId: r.artifact_id,
-      artifactName: r.artifact_name,
-      artifactType: r.artifact_type,
-      timestamp: r.timestamp,
-      qualityScore: r.quality_score,
+      artifactId: r.artifactId,
+      artifactName: title,
+      artifactType: r.artifactType ?? "prd",
+      timestamp: r.reviewedAt,
+      qualityScore: r.qualityScore ?? 0,
       recommendation: r.recommendation,
       blocked: r.blocked === 1,
       driftVerdict: drift?.verdict ?? null,
@@ -211,21 +222,42 @@ export async function GET() {
 
   // ── Gate health panel ──────────────────────────────────────────────────────
 
-  const gateHealthPanel = GATE_DEFS.map(({ prefix, name }) => {
-    let passed = 0, failed = 0;
+  const gateHealthPanel = GATE_DEFS.map(({ prefix, name }, idx) => {
+    const gateNum = idx + 1;
+    const colName = `gate${gateNum}_passed` as keyof RawReviewRow;
+
+    let passed = 0;
+    let failed = 0;
     const failReasonCounts = new Map<string, number>();
 
     for (const row of allReviews) {
-      const gates = safeParseJSON<HardGateResultRaw[]>(row.hard_gates, []);
-      const forGate = gates.filter((g) => g.phase.startsWith(prefix));
-      if (forGate.length === 0) continue;
+      const storedVal = row[colName] as number | null;
 
-      if (forGate.every((g) => g.passed)) {
-        passed++;
+      if (storedVal !== null && storedVal !== undefined) {
+        // Use pre-computed column (fast path)
+        if (storedVal === 1) {
+          passed++;
+        } else {
+          failed++;
+          // Still parse JSON to surface failure reasons
+          const gates = safeParseJSON<HardGateResultRaw[]>(row.hardGatesJson, []);
+          for (const g of gates.filter((g) => g.phase?.startsWith(prefix) && !g.passed)) {
+            if (g.reason) failReasonCounts.set(g.reason, (failReasonCounts.get(g.reason) ?? 0) + 1);
+          }
+        }
       } else {
-        failed++;
-        for (const g of forGate.filter((g) => !g.passed)) {
-          failReasonCounts.set(g.reason, (failReasonCounts.get(g.reason) ?? 0) + 1);
+        // Fallback to JSON parsing for rows without stored gate columns
+        const gates = safeParseJSON<HardGateResultRaw[]>(row.hardGatesJson, []);
+        const forGate = gates.filter((g) => g.phase?.startsWith(prefix));
+        if (forGate.length === 0) continue;
+
+        if (forGate.every((g) => g.passed)) {
+          passed++;
+        } else {
+          failed++;
+          for (const g of forGate.filter((g) => !g.passed)) {
+            if (g.reason) failReasonCounts.set(g.reason, (failReasonCounts.get(g.reason) ?? 0) + 1);
+          }
         }
       }
     }
@@ -249,9 +281,9 @@ export async function GET() {
 
   const findingMap = new Map<string, number>();
   for (const row of allReviews) {
-    const review = safeParseJSON<{
-      findings?: { findingType: string }[];
-    }>(row.adversarial_review, {});
+    const review = safeParseJSON<{ findings?: { findingType: string }[] }>(
+      row.adversarialJson, {}
+    );
     for (const f of review.findings ?? []) {
       findingMap.set(f.findingType, (findingMap.get(f.findingType) ?? 0) + 1);
     }
@@ -263,32 +295,48 @@ export async function GET() {
   // ── AI-era audit aggregate ─────────────────────────────────────────────────
 
   const aiEraAuditAggregate = {
-    evalCredibility: { credible: 0, questionable: 0, missing: 0 },
+    evalCredibility:       { credible: 0, questionable: 0, missing: 0 },
     economicDefensibility: { strong: 0, weak: 0, missing: 0 },
-    operabilityRealism: { realistic: 0, optimistic: 0, missing: 0 },
-    complianceReadiness: { ready: 0, gaps: 0, missing: 0 },
+    operabilityRealism:    { realistic: 0, optimistic: 0, missing: 0 },
+    complianceReadiness:   { ready: 0, gaps: 0, missing: 0 },
   };
 
   for (const row of allReviews) {
-    const review = safeParseJSON<{ aiEraAudit?: AiEraAuditRaw }>(row.adversarial_review, {});
-    const audit = review.aiEraAudit;
-    if (!audit) continue;
+    if (row.eval_credibility || row.economic_defensibility || row.operability_realism || row.compliance_readiness) {
+      // Use stored columns (fast path)
+      const ec = row.eval_credibility;
+      if (ec === "credible" || ec === "questionable" || ec === "missing") aiEraAuditAggregate.evalCredibility[ec]++;
 
-    const ec = audit.evalCredibility;
-    if (ec === "credible" || ec === "questionable" || ec === "missing") aiEraAuditAggregate.evalCredibility[ec]++;
-    else aiEraAuditAggregate.evalCredibility.missing++;
+      const ed = row.economic_defensibility;
+      if (ed === "strong" || ed === "weak" || ed === "missing") aiEraAuditAggregate.economicDefensibility[ed]++;
 
-    const ed = audit.economicDefensibility;
-    if (ed === "strong" || ed === "weak" || ed === "missing") aiEraAuditAggregate.economicDefensibility[ed]++;
-    else aiEraAuditAggregate.economicDefensibility.missing++;
+      const or_ = row.operability_realism;
+      if (or_ === "realistic" || or_ === "optimistic" || or_ === "missing") aiEraAuditAggregate.operabilityRealism[or_]++;
 
-    const or_ = audit.operabilityRealism;
-    if (or_ === "realistic" || or_ === "optimistic" || or_ === "missing") aiEraAuditAggregate.operabilityRealism[or_]++;
-    else aiEraAuditAggregate.operabilityRealism.missing++;
+      const cr = row.compliance_readiness;
+      if (cr === "ready" || cr === "gaps" || cr === "missing") aiEraAuditAggregate.complianceReadiness[cr]++;
+    } else {
+      // Fallback: parse adversarialJson
+      const review = safeParseJSON<{ aiEraAudit?: Record<string, string> }>(row.adversarialJson, {});
+      const audit = review.aiEraAudit;
+      if (!audit) continue;
 
-    const cr = audit.complianceReadiness;
-    if (cr === "ready" || cr === "gaps" || cr === "missing") aiEraAuditAggregate.complianceReadiness[cr]++;
-    else aiEraAuditAggregate.complianceReadiness.missing++;
+      const ec = audit.evalCredibility;
+      if (ec === "credible" || ec === "questionable" || ec === "missing") aiEraAuditAggregate.evalCredibility[ec]++;
+      else aiEraAuditAggregate.evalCredibility.missing++;
+
+      const ed = audit.economicDefensibility;
+      if (ed === "strong" || ed === "weak" || ed === "missing") aiEraAuditAggregate.economicDefensibility[ed]++;
+      else aiEraAuditAggregate.economicDefensibility.missing++;
+
+      const or_ = audit.operabilityRealism;
+      if (or_ === "realistic" || or_ === "optimistic" || or_ === "missing") aiEraAuditAggregate.operabilityRealism[or_]++;
+      else aiEraAuditAggregate.operabilityRealism.missing++;
+
+      const cr = audit.complianceReadiness;
+      if (cr === "ready" || cr === "gaps" || cr === "missing") aiEraAuditAggregate.complianceReadiness[cr]++;
+      else aiEraAuditAggregate.complianceReadiness.missing++;
+    }
   }
 
   // ── Drift heatmap ──────────────────────────────────────────────────────────
@@ -300,10 +348,7 @@ export async function GET() {
     .all() as Pick<RawDriftRow, "artifact_label" | "result_json" | "created_at">[];
 
   const driftHeatmap = allDriftFull.map((d) => {
-    const parsed = safeParseJSON<{ driftScore?: number; verdict?: string }>(
-      d.result_json,
-      {}
-    );
+    const parsed = safeParseJSON<{ driftScore?: number; verdict?: string }>(d.result_json, {});
     return {
       artifactLabel: d.artifact_label,
       date: isoDateOnly(d.created_at),

@@ -165,17 +165,34 @@ export async function POST() {
       updatedAt: createdAt,
     });
 
+    const allPass = !s.blocked && s.qualityScore >= 70;
+    const hardGates = [
+      { gateId: "G1-problem-length", gateName: "Problem Statement Length",  phase: "Gate 1: Evidence-Grounded Problem", passed: allPass || s.qualityScore >= 85, reason: allPass ? "Problem statement meets length requirement." : "Problem statement is too short.",        blocksSubmission: true, documentationRef: "" },
+      { gateId: "G1-evidence-count", gateName: "Evidence Signal Count",     phase: "Gate 1: Evidence-Grounded Problem", passed: allPass || s.qualityScore >= 80, reason: allPass ? "2 evidence signals provided." : "Only 1 evidence signal provided.",                    blocksSubmission: true, documentationRef: "" },
+      { gateId: "G2-eval-missing",   gateName: "Synthetic Eval Present",    phase: "Gate 2: Synthetic Evals",           passed: allPass || s.qualityScore >= 75, reason: allPass ? "Eval section present." : "syntheticEval section missing.",                              blocksSubmission: true, documentationRef: "" },
+      { gateId: "G2-groundedness",   gateName: "Groundedness Score",        phase: "Gate 2: Synthetic Evals",           passed: allPass,                          reason: allPass ? "Groundedness 94%." : "Groundedness 78% — below 90% threshold.",                       blocksSubmission: true, documentationRef: "" },
+      { gateId: "G3-tco-missing",    gateName: "TCO Analysis Present",      phase: "Gate 3: ROI Moat",                  passed: allPass || s.qualityScore >= 70, reason: allPass ? "tcoAnalysis present." : "tcoAnalysis section missing.",                               blocksSubmission: true, documentationRef: "" },
+      { gateId: "G3-roi-moat",       gateName: "ROI Moat Justification",    phase: "Gate 3: ROI Moat",                  passed: allPass,                          reason: allPass ? "ROI moat documented." : "roiMoat too short.",                                         blocksSubmission: true, documentationRef: "" },
+      { gateId: "G4-nfr-missing",    gateName: "NFR Section Present",       phase: "Gate 4: NFR Zero Tolerance",        passed: !s.blocked,                       reason: !s.blocked ? "nonFunctionalRequirements present." : "NFR section missing.",                    blocksSubmission: true, documentationRef: "" },
+      { gateId: "G4-compliance",     gateName: "Compliance Frameworks",     phase: "Gate 4: NFR Zero Tolerance",        passed: !s.blocked,                       reason: !s.blocked ? "GDPR, SOC 2 declared." : "complianceFrameworks empty.",                          blocksSubmission: true, documentationRef: "" },
+      { gateId: "G5-ops-missing",    gateName: "Operability Constraints",   phase: "Gate 5: Operability Constraints",   passed: !s.blocked,                       reason: !s.blocked ? "operabilityConstraints present." : "operabilityConstraints missing.",            blocksSubmission: true, documentationRef: "" },
+      { gateId: "G5-fallback",       gateName: "Fallback Plan",             phase: "Gate 5: Operability Constraints",   passed: !s.blocked,                       reason: !s.blocked ? "Fallback plan documented." : "fallbackPlan too short.",                          blocksSubmission: true, documentationRef: "" },
+      { gateId: "G6-metric-count",   gateName: "Success Metric Count",      phase: "Gate 6: Quantified Success",        passed: s.qualityScore >= 55,             reason: s.qualityScore >= 55 ? "2 metrics defined." : "Only 1 metric defined.",                       blocksSubmission: true, documentationRef: "" },
+      { gateId: "G6-numeric-targets",gateName: "Numeric Metric Targets",    phase: "Gate 6: Quantified Success",        passed: s.qualityScore >= 70,             reason: s.qualityScore >= 70 ? "All targets are numeric." : "Metric targets are vague.",                blocksSubmission: true, documentationRef: "" },
+    ];
+
+    const evalCredibility       = s.qualityScore >= 80 ? "credible"   : s.qualityScore >= 60 ? "questionable" : "missing";
+    const economicDefensibility = s.qualityScore >= 75 ? "strong"     : s.qualityScore >= 55 ? "weak"         : "missing";
+    const operabilityRealism    = s.qualityScore >= 70 ? "realistic"  : s.qualityScore >= 50 ? "optimistic"   : "missing";
+    const complianceReadiness   = s.qualityScore >= 65 ? "ready"      : s.qualityScore >= 45 ? "gaps"         : "missing";
+
     saveReview({
       id: reviewId,
       artifactId,
       qualityScore: s.qualityScore,
       recommendation: s.recommendation,
       blocked: s.blocked ? 1 : 0,
-      hardGatesJson: JSON.stringify(
-        s.blocked
-          ? [{ gate: "minimum_content", passed: false, reason: "Required sections are empty" }]
-          : [{ gate: "minimum_content", passed: true }]
-      ),
+      hardGatesJson: JSON.stringify(hardGates),
       softGatesJson: JSON.stringify([
         {
           gate: "success_metrics_defined",
@@ -184,18 +201,21 @@ export async function POST() {
         },
       ]),
       adversarialJson: JSON.stringify({
-        riskLevel: s.qualityScore < 50 ? "high" : s.qualityScore < 75 ? "medium" : "low",
-        concerns:
-          s.qualityScore < 50
-            ? ["Insufficient detail to assess feasibility", "Missing acceptance criteria"]
-            : [],
+        overallRisk: s.qualityScore < 50 ? "critical" : s.qualityScore < 75 ? "high" : "medium",
+        findings: s.qualityScore < 70
+          ? [{ findingType: "missing_evidence", description: "Insufficient supporting evidence" }]
+          : [],
+        aiEraAudit: { evalCredibility, economicDefensibility, operabilityRealism, complianceReadiness },
       }),
       driftJson: JSON.stringify({
         aligned: s.qualityScore >= 70,
-        driftedObjectives:
-          s.qualityScore < 70 ? ["Increase user retention"] : [],
+        driftedObjectives: s.qualityScore < 70 ? ["Increase user retention"] : [],
       }),
       reviewedAt: isoOffset(s.daysAgo - 0.1),
+      gate1_passed: null, gate2_passed: null, gate3_passed: null,
+      gate4_passed: null, gate5_passed: null, gate6_passed: null,
+      ai_era_audit_json: null, eval_credibility: null,
+      economic_defensibility: null, operability_realism: null, compliance_readiness: null,
     });
   }
 

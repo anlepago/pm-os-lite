@@ -146,7 +146,7 @@ export function listArtifacts(artifactType?: string): Artifact[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function extractGatePassed(gates: { phase: string; passed: boolean }[], gateNum: number): number | null {
-  const checks = gates.filter((g) => g.phase.startsWith(`Gate ${gateNum}:`));
+  const checks = gates.filter((g) => g.phase?.startsWith(`Gate ${gateNum}:`));
   if (checks.length === 0) return null;
   return checks.every((g) => g.passed) ? 1 : 0;
 }
